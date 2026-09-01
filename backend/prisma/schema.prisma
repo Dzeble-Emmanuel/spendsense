@@ -1,0 +1,81 @@
+// Prisma schema for SpendSense
+// Supports PostgreSQL as primary database
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  fullName  String
+  email     String   @unique
+  password  String
+  createdAt DateTime @default(now())
+
+  transactions    Transaction[]
+  budgets         Budget[]
+  predictions     Prediction[]
+  recommendations Recommendation[]
+}
+
+model Transaction {
+  id              String   @id @default(cuid())
+  title           String
+  amount          Float
+  type            String   // "income" or "expense"
+  category        String
+  description     String?
+  transactionDate DateTime @default(now())
+  createdAt       DateTime @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([transactionDate])
+}
+
+model Budget {
+  id       String @id @default(cuid())
+  category String
+  amount   Float
+  month    Int
+  year     Int
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, category, month, year])
+}
+
+model Prediction {
+  id             String   @id @default(cuid())
+  predictionType String   // "expense", "savings", "income"
+  predictedValue Float
+  confidence     Float
+  period         String
+  createdAt      DateTime @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Recommendation {
+  id        String   @id @default(cuid())
+  message   String
+  category  String
+  priority  String   // "high", "medium", "low"
+  createdAt DateTime @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}

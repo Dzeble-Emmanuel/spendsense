@@ -1,0 +1,90 @@
+import {
+  PermissionsAndroid,
+  Platform
+} from "react-native";
+
+import ExpoSmsListener from "../../modules/expo-sms-listener/src/ExpoSmsListenerModule";
+
+
+async function requestSMSPermission(){
+
+  if(Platform.OS !== "android"){
+    return false;
+  }
+
+
+  const granted =
+    await PermissionsAndroid.request(
+      PermissionsAndroid.PERMISSIONS.RECEIVE_SMS,
+      {
+        title:"SMS Permission",
+        message:
+          "Finance Analyzer needs access to SMS messages to detect transactions.",
+        buttonPositive:"Allow"
+      }
+    );
+
+
+  return (
+    granted ===
+    PermissionsAndroid.RESULTS.GRANTED
+  );
+
+}
+
+
+
+export async function startSMSListener(
+  callback:(message:string)=>void
+){
+
+
+  const permissionGranted =
+    await requestSMSPermission();
+
+
+
+  if(!permissionGranted){
+
+    console.log(
+      "SMS permission denied"
+    );
+
+    return;
+
+  }
+
+
+
+  const subscription =
+    ExpoSmsListener.addListener(
+      "onSmsReceived",
+      (event)=>{
+
+        console.log(
+          "SMS received:",
+          event
+        );
+
+
+        callback(
+          event.message
+        );
+
+      }
+    );
+
+
+
+  ExpoSmsListener.startListening();
+
+
+
+  return ()=>{
+
+    subscription.remove();
+
+  };
+
+
+}

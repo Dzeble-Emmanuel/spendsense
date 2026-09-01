@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Expo / Mobile
+mobile/.expo/
+mobile/dist/
+mobile/web-build/
+mobile/*.apk
+mobile/*.aab
+
+# Environment variables
+.env
+.env.local
+.env.production
+backend/.env
+
+# Build outputs & caches
+dist/
+build/
+.cache/
+
+# IDE / System
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
