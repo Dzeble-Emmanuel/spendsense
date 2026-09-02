@@ -4,16 +4,11 @@ import { Platform } from "react-native";
 
 // Backend URL: Android emulator uses 10.0.2.2, iOS simulator uses localhost
 // For Expo Go on a real device, use your machine's local IP address
+// Live Cloud Backend on Render
+const CLOUD_API_URL = "https://spendsense-api-ojc8.onrender.com/api";
+
 const getBaseUrl = () => {
-  if (__DEV__) {
-    // Change this to your computer's local network IP when testing on a real device
-    // e.g., "http://192.168.1.100:5000/api"
-    if (Platform.OS === "android") {
-      return "http://10.0.2.2:5000/api";
-    }
-    return "http://localhost:5000/api";
-  }
-  return "https://api.spendsense.app/api"; // production URL placeholder
+  return CLOUD_API_URL;
 };
 
 const api = axios.create({
