@@ -7,7 +7,6 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
-
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
@@ -16,7 +15,6 @@
         "NSFaceIDUsageDescription": "SpendSense uses Face ID to protect your financial data."
       }
     },
-
     "android": {
       "package": "com.spendsense.app",
       "adaptiveIcon": {
@@ -24,19 +22,18 @@
         "backgroundColor": "#0F172A"
       },
       "permissions": [
-        "CAMERA",
-        "READ_MEDIA_IMAGES",
-        "USE_BIOMETRIC",
-        "USE_FINGERPRINT",
-        "READ_EXTERNAL_STORAGE",
-        "WRITE_EXTERNAL_STORAGE"
+        "android.permission.CAMERA",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.RECORD_AUDIO"
       ]
     },
-
     "web": {
       "favicon": "./assets/favicon.png"
     },
-
     "plugins": [
       "expo-router",
       "expo-font",
@@ -59,12 +56,12 @@
         }
       ]
     ],
-
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "d4f09ccf-1da2-4aa6-b812-447aa588c562"
+        "projectId": "7737ab9d-0dfc-4aa3-be8d-3a0569a3ea49"
       }
-    }
+    },
+    "owner": "kedemstudios"
   }
 }
