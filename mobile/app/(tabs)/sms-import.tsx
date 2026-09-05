@@ -1,235 +1,631 @@
 import { useState } from "react";
 import {
-  View, Text, StyleSheet, TextInput, TouchableOpacity,
-  ScrollView, Alert, Clipboard,
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  ScrollView,
+  StyleSheet,
+  Alert,
+  Clipboard,
+  Switch,
+  Platform,
 } from "react-native";
 import { router } from "expo-router";
+import { Feather, Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFinance } from "../../src/hooks/useFinance";
 import { useTheme } from "../../src/hooks/useTheme";
-import { parseFinancialSMS } from "../../src/sms/smsParser";
-import { EXPENSE_CATEGORIES, INCOME_CATEGORIES } from "../../src/types/finance";
+import { useSettings } from "../../src/hooks/useSettings";
+import { useSubFeatureBack } from "../../src/hooks/useSubFeatureBack";
+import { useMoMoListener } from "../../src/hooks/useMoMoListener";
+import { parseFinancialSMS, ParsedSMSResult } from "../../src/sms/smsParser";
+import { SAMPLE_MOMO_ALERTS } from "../../src/services/smsService";
 
-export default function SMSImport() {
+export default function SMSImportScreen() {
   const { addTransaction } = useFinance();
   const { theme } = useTheme();
+  const { formatMoney } = useSettings();
+  const insets = useSafeAreaInsets();
+  const handleBack = useSubFeatureBack("/(tabs)/profile");
+
+  const topPadding = insets.top > 0 ? insets.top + 10 : 20;
+
+  const {
+    permissions,
+    autoSync,
+    recentImports,
+    requestPermissions,
+    toggleAutoSync,
+    simulateIncomingAlert,
+  } = useMoMoListener();
 
   const [smsText, setSmsText] = useState("");
-  const [parsed, setParsed] = useState<ReturnType<typeof parseFinancialSMS> | null>(null);
-  const [editAmount, setEditAmount] = useState("");
-  const [editTitle, setEditTitle] = useState("");
-  const [editCategory, setEditCategory] = useState("Other");
-  const [editType, setEditType] = useState<"income" | "expense">("expense");
+  const [parsed, setParsed] = useState<ParsedSMSResult | null>(null);
+  const [simulationToast, setSimulationToast] = useState<string | null>(null);
 
-  async function pasteSMS() {
+  const handlePasteClipboard = async () => {
     try {
       const text = await Clipboard.getString();
-      if (text) setSmsText(text);
+      if (text) {
+        setSmsText(text);
+        const res = parseFinancialSMS(text);
+        setParsed(res);
+      } else {
+        Alert.alert("Clipboard Empty", "No text found on clipboard.");
+      }
     } catch {
-      Alert.alert("Clipboard Error", "Could not read clipboard. Please paste manually.");
+      Alert.alert("Clipboard", "Please paste your message directly into the box.");
     }
-  }
+  };
 
-  function analyzeSMS() {
+  const handleAnalyze = () => {
     if (!smsText.trim()) {
-      Alert.alert("Empty", "Please paste an SMS message first.");
+      Alert.alert("Empty", "Please paste an SMS alert first.");
       return;
     }
-    const result = parseFinancialSMS(smsText);
-    setParsed(result);
-    if (result.isFinancial) {
-      setEditAmount(result.amount ? result.amount.toString() : "");
-      setEditTitle(result.title || "Mobile Transaction");
-      setEditCategory(result.category || "Other");
-      setEditType(result.type || "expense");
-    }
-  }
+    const res = parseFinancialSMS(smsText);
+    setParsed(res);
+  };
 
-  function saveTransaction() {
-    if (!editAmount || isNaN(parseFloat(editAmount))) {
-      Alert.alert("Invalid Amount", "Please enter a valid amount.");
-      return;
-    }
+  const handleSave = () => {
+    if (!parsed || !parsed.isFinancial || !parsed.amount) return;
+
     addTransaction({
-      id: Date.now().toString(),
-      title: editTitle,
-      amount: parseFloat(editAmount),
-      type: editType,
-      category: editCategory,
-      description: `Imported from SMS: ${smsText.substring(0, 60)}`,
+      title: parsed.title,
+      amount: parsed.amount,
+      type: parsed.type,
+      category: parsed.category,
+      description: `SMS Import (${parsed.provider}): ${smsText.slice(0, 60)}...`,
       date: new Date().toISOString(),
+      locationLabel: parsed.type === "expense" ? (parsed.locationLabel?.trim() || undefined) : undefined,
     });
-    Alert.alert("✅ Saved!", "Transaction imported from SMS.", [
-      { text: "OK", onPress: () => router.back() },
-    ]);
-  }
 
-  const categories = editType === "income" ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
+    Alert.alert("Added", "Transaction saved directly to ledger.", [
+      { text: "View Transactions", onPress: () => router.push("/(tabs)/transactions") },
+      { text: "OK", style: "cancel" },
+    ]);
+  };
+
+  const handleTriggerSimulation = async (index: number) => {
+    const { sample, result } = await simulateIncomingAlert(index);
+    if (result.success) {
+      setSimulationToast(`Detected & Logged: ${result.parsed.title} (${formatMoney(result.parsed.amount || 0)})`);
+      setTimeout(() => setSimulationToast(null), 4000);
+    } else if (result.isDuplicate) {
+      setSimulationToast(`Already logged: ${result.parsed.title}`);
+      setTimeout(() => setSimulationToast(null), 3000);
+    }
+  };
+
+  const isPermissionsActive = permissions.isFullyGranted;
 
   return (
     <ScrollView
-      style={[styles.container, { backgroundColor: theme.background }]}
-      contentContainerStyle={{ paddingBottom: 40 }}
-      keyboardShouldPersistTaps="handled"
+      style={{ flex: 1, backgroundColor: theme.background }}
+      showsVerticalScrollIndicator={false}
+      contentContainerStyle={{
+        paddingTop: topPadding,
+        paddingBottom: 50,
+        paddingHorizontal: 18,
+      }}
     >
-      <Text style={[styles.title, { color: theme.text }]}>📩 SMS Import</Text>
-      <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-        Copy a financial SMS (MoMo, bank alert, etc.) and paste it here to auto-extract the transaction.
-      </Text>
-
-      {/* How-to guide */}
-      <View style={[styles.guideCard, { backgroundColor: theme.card }]}>
-        <Text style={[styles.guideTitle, { color: theme.text }]}>How to use:</Text>
-        <Text style={[styles.guideStep, { color: theme.textSecondary }]}>1. Open your SMS app</Text>
-        <Text style={[styles.guideStep, { color: theme.textSecondary }]}>2. Long-press a MoMo or bank SMS</Text>
-        <Text style={[styles.guideStep, { color: theme.textSecondary }]}>3. Tap "Copy" or "Select All"</Text>
-        <Text style={[styles.guideStep, { color: theme.textSecondary }]}>4. Come back here and tap "Paste SMS"</Text>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.backBtn} onPress={handleBack}>
+          <Feather name="arrow-left" size={18} color={theme.text} />
+          <Text style={[styles.backText, { color: theme.textSecondary }]}>Back</Text>
+        </TouchableOpacity>
+        <Text style={[styles.title, { color: theme.text }]}>SMS & MoMo Sync</Text>
+        <View style={{ width: 45 }} />
       </View>
 
-      {/* SMS Input */}
-      <Text style={[styles.label, { color: theme.textSecondary }]}>SMS MESSAGE</Text>
-      <TextInput
-        style={[styles.smsInput, { backgroundColor: theme.card, color: theme.text, borderColor: theme.border }]}
-        value={smsText}
-        onChangeText={setSmsText}
-        placeholder="Paste your SMS text here..."
-        placeholderTextColor={theme.textSecondary}
-        multiline
-        numberOfLines={5}
-      />
+      {/* Simulation Feedback Toast */}
+      {simulationToast && (
+        <View style={[styles.toastCard, { backgroundColor: theme.card, borderColor: "#10B981" }]}>
+          <Ionicons name="checkmark-circle" size={20} color="#10B981" />
+          <Text style={[styles.toastText, { color: theme.text }]} numberOfLines={2}>
+            {simulationToast}
+          </Text>
+        </View>
+      )}
 
-      <View style={styles.smsButtons}>
-        <TouchableOpacity
-          style={[styles.pasteBtn, { backgroundColor: theme.card, borderColor: theme.border }]}
-          onPress={pasteSMS}
-        >
-          <Text style={[styles.pasteBtnText, { color: theme.primary }]}>📋 Paste SMS</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.analyzeBtn} onPress={analyzeSMS}>
-          <Text style={styles.analyzeBtnText}>🔍 Analyze</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Result */}
-      {parsed && (
-        <>
-          {!parsed.isFinancial ? (
-            <View style={[styles.notFinancialCard, { backgroundColor: theme.card }]}>
-              <Text style={styles.notFinancialIcon}>🤷</Text>
-              <Text style={[styles.notFinancialText, { color: theme.textSecondary }]}>
-                This doesn't look like a financial SMS. Try a MoMo, bank, or airtime message.
-              </Text>
+      {/* AUTOMATIC MOMO & BANK SMS DETECTION CARD */}
+      <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]}>
+        <View style={styles.cardTopRow}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            <View style={[styles.iconCircle, { backgroundColor: theme.primaryLight }]}>
+              <Ionicons name="chatbubble-ellipses-outline" size={20} color={theme.primary} />
             </View>
-          ) : (
-            <>
-              <View style={[styles.resultBanner, { backgroundColor: "#064E3B" }]}>
-                <Text style={styles.resultBannerText}>
-                  ✅ Financial SMS detected! Review details below.
+            <View>
+              <Text style={[styles.metaLabel, { color: theme.textSecondary }]}>AUTOMATIC DETECTION</Text>
+              <Text style={[styles.cardHeading, { color: theme.text }]}>MoMo & Bank SMS Sync</Text>
+            </View>
+          </View>
+          <Switch
+            value={autoSync}
+            onValueChange={toggleAutoSync}
+            trackColor={{ false: "rgba(100, 116, 139, 0.2)", true: theme.primary }}
+            thumbColor="#FFFFFF"
+          />
+        </View>
+
+        <Text style={[styles.guideText, { color: theme.textSecondary }]}>
+          SpendSense automatically reads incoming transactional SMS from MTN MoMo, Telecel Cash,
+          AT Money, and bank alerts so they appear instantly in your ledger without manual entry.
+        </Text>
+
+        {/* Permission Status Pill */}
+        <View style={[styles.statusBanner, { backgroundColor: isPermissionsActive ? "rgba(16, 185, 129, 0.1)" : "rgba(245, 158, 11, 0.1)" }]}>
+          <View
+            style={[
+              styles.statusDot,
+              { backgroundColor: isPermissionsActive ? "#10B981" : "#F59E0B" },
+            ]}
+          />
+          <Text
+            style={[
+              styles.statusText,
+              { color: isPermissionsActive ? "#10B981" : "#F59E0B" },
+            ]}
+          >
+            {isPermissionsActive
+              ? autoSync
+                ? "Active & Monitoring Incoming SMS"
+                : "SMS Permission Granted (Auto-sync disabled)"
+              : "SMS Read & Receive Permission Required"}
+          </Text>
+        </View>
+
+        {/* Grant Permission Button (if not granted) */}
+        {!isPermissionsActive && (
+          <TouchableOpacity
+            style={[styles.permissionBtn, { backgroundColor: theme.primary }]}
+            onPress={requestPermissions}
+          >
+            <Feather name="shield" size={15} color="#FFFFFF" />
+            <Text style={styles.permissionBtnText}>Grant SMS Permission</Text>
+          </TouchableOpacity>
+        )}
+
+        {/* Test Alert Simulator Row */}
+        <View style={{ marginTop: 14 }}>
+          <Text style={[styles.sectionSubLabel, { color: theme.textSecondary }]}>
+            TEST INCOMING MOMO DETECTION:
+          </Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, marginTop: 8 }}>
+            {SAMPLE_MOMO_ALERTS.map((sample, idx) => (
+              <TouchableOpacity
+                key={idx}
+                style={[
+                  styles.samplePill,
+                  { backgroundColor: theme.background, borderColor: theme.border },
+                ]}
+                onPress={() => handleTriggerSimulation(idx)}
+              >
+                <Feather
+                  name={sample.type === "income" ? "arrow-down-left" : "arrow-up-right"}
+                  size={12}
+                  color={sample.type === "income" ? "#10B981" : "#F43F5E"}
+                />
+                <Text style={[styles.sampleText, { color: theme.text }]}>
+                  {sample.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      </View>
+
+      {/* RECENT AUTO-DETECTED ALERTS */}
+      {recentImports.length > 0 && (
+        <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border, marginTop: 14 }]}>
+          <View style={styles.recentHeader}>
+            <Text style={[styles.metaLabel, { color: theme.textSecondary }]}>
+              RECENT DETECTED ALERTS
+            </Text>
+            <TouchableOpacity onPress={() => router.push("/(tabs)/transactions")}>
+              <Text style={[styles.viewAllText, { color: theme.primary }]}>View Ledger</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={{ gap: 8, marginTop: 8 }}>
+            {recentImports.slice(0, 3).map((item, i) => (
+              <View
+                key={i}
+                style={[styles.recentItem, { backgroundColor: theme.background, borderColor: theme.border }]}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.recentTitle, { color: theme.text }]}>{item.title}</Text>
+                  <Text style={[styles.recentProvider, { color: theme.textSecondary }]}>
+                    {item.provider} • {item.category}
+                  </Text>
+                </View>
+                <Text
+                  style={[
+                    styles.recentAmount,
+                    { color: item.type === "income" ? "#10B981" : "#F43F5E" },
+                  ]}
+                >
+                  {item.type === "income" ? "+" : "-"}
+                  {formatMoney(item.amount || 0)}
                 </Text>
               </View>
+            ))}
+          </View>
+        </View>
+      )}
 
-              {/* Type */}
-              <Text style={[styles.label, { color: theme.textSecondary }]}>TYPE</Text>
-              <View style={styles.typeRow}>
-                {(["expense", "income"] as const).map((t) => (
-                  <TouchableOpacity
-                    key={t}
-                    style={[styles.typeBtn, {
-                      backgroundColor: editType === t
-                        ? (t === "income" ? "#D1FAE5" : "#FEE2E2")
-                        : theme.card,
-                      borderColor: editType === t
-                        ? (t === "income" ? "#059669" : "#DC2626")
-                        : theme.border,
-                    }]}
-                    onPress={() => setEditType(t)}
+      {/* MANUAL SMS PASTE & PARSING */}
+      <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border, marginTop: 14 }]}>
+        <View style={styles.inputHeader}>
+          <Text style={[styles.metaLabel, { color: theme.textSecondary }]}>
+            MANUAL SMS PARSER
+          </Text>
+          <TouchableOpacity
+            style={[styles.pasteBtn, { backgroundColor: theme.primaryLight }]}
+            onPress={handlePasteClipboard}
+          >
+            <Feather name="clipboard" size={13} color={theme.primary} />
+            <Text style={[styles.pasteBtnText, { color: theme.primary }]}>Paste</Text>
+          </TouchableOpacity>
+        </View>
+
+        <TextInput
+          style={[
+            styles.smsInput,
+            { backgroundColor: theme.background, borderColor: theme.border, color: theme.text },
+          ]}
+          placeholder="Paste SMS alert from MTN MoMo, Telecel Cash, or bank here..."
+          placeholderTextColor={theme.textMuted}
+          multiline
+          numberOfLines={4}
+          value={smsText}
+          onChangeText={setSmsText}
+        />
+
+        <View style={styles.actionRow}>
+          <TouchableOpacity
+            style={[styles.analyzeBtn, { backgroundColor: theme.primary }]}
+            onPress={handleAnalyze}
+          >
+            <Ionicons name="sparkles" size={15} color="#FFFFFF" />
+            <Text style={styles.analyzeText}>Analyze SMS</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.clearBtn, { backgroundColor: theme.background, borderColor: theme.border }]}
+            onPress={() => {
+              setSmsText("");
+              setParsed(null);
+            }}
+          >
+            <Text style={[styles.clearText, { color: theme.textSecondary }]}>Clear</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* PARSED RESULT PREVIEW */}
+      {parsed && (
+        <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border, marginTop: 14 }]}>
+          {parsed.isFinancial ? (
+            <>
+              <View style={styles.resultHeader}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                  <View style={styles.resultDot} />
+                  <Text style={[styles.metaLabel, { color: "#10B981" }]}>
+                    {parsed.provider.toUpperCase()} PARSED
+                  </Text>
+                </View>
+                <View
+                  style={[
+                    styles.typePill,
+                    {
+                      backgroundColor:
+                        parsed.type === "income"
+                          ? "rgba(16, 185, 129, 0.12)"
+                          : "rgba(244, 63, 94, 0.12)",
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.typePillText,
+                      { color: parsed.type === "income" ? "#10B981" : "#F43F5E" },
+                    ]}
                   >
-                    <Text style={{ color: editType === t ? (t === "income" ? "#059669" : "#DC2626") : theme.text, fontWeight: "700" }}>
-                      {t === "income" ? "💰 Income" : "💸 Expense"}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+                    {parsed.type.toUpperCase()}
+                  </Text>
+                </View>
               </View>
 
-              <Text style={[styles.label, { color: theme.textSecondary }]}>TITLE</Text>
-              <TextInput
-                style={[styles.input, { backgroundColor: theme.card, color: theme.text, borderColor: theme.border }]}
-                value={editTitle}
-                onChangeText={setEditTitle}
-                placeholder="Transaction title"
-                placeholderTextColor={theme.textSecondary}
-              />
+              <View style={{ gap: 10, marginVertical: 10 }}>
+                <View>
+                  <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>TITLE / RECIPIENT</Text>
+                  <TextInput
+                    style={[
+                      styles.fieldInput,
+                      { backgroundColor: theme.background, borderColor: theme.border, color: theme.text },
+                    ]}
+                    value={parsed.title}
+                    onChangeText={(v: string) => setParsed({ ...parsed, title: v })}
+                  />
+                </View>
 
-              <Text style={[styles.label, { color: theme.textSecondary }]}>AMOUNT (GH₵)</Text>
-              <TextInput
-                style={[styles.input, { backgroundColor: theme.card, color: theme.text, borderColor: theme.border }]}
-                value={editAmount}
-                onChangeText={setEditAmount}
-                keyboardType="decimal-pad"
-                placeholder="0.00"
-                placeholderTextColor={theme.textSecondary}
-              />
+                <View>
+                  <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>AMOUNT (GHS)</Text>
+                  <TextInput
+                    style={[
+                      styles.fieldInput,
+                      {
+                        backgroundColor: theme.background,
+                        borderColor: theme.border,
+                        color: parsed.type === "income" ? "#10B981" : "#F43F5E",
+                        fontWeight: "900",
+                      },
+                    ]}
+                    keyboardType="decimal-pad"
+                    value={String(parsed.amount || "")}
+                    onChangeText={(v: string) =>
+                      setParsed({ ...parsed, amount: parseFloat(v) || 0 })
+                    }
+                  />
+                </View>
 
-              <Text style={[styles.label, { color: theme.textSecondary }]}>CATEGORY</Text>
-              <View style={styles.categoryGrid}>
-                {categories.map((cat) => (
-                  <TouchableOpacity
-                    key={cat.name}
-                    style={[styles.catChip, {
-                      backgroundColor: editCategory === cat.name ? cat.color + "20" : theme.card,
-                      borderColor: editCategory === cat.name ? cat.color : theme.border,
-                    }]}
-                    onPress={() => setEditCategory(cat.name)}
-                  >
-                    <Text>{cat.icon}</Text>
-                    <Text style={{ color: editCategory === cat.name ? cat.color : theme.text, fontSize: 12, fontWeight: "600" }}>
-                      {cat.name}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+                <View>
+                  <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>CATEGORY</Text>
+                  <TextInput
+                    style={[
+                      styles.fieldInput,
+                      { backgroundColor: theme.background, borderColor: theme.border, color: theme.text },
+                    ]}
+                    value={parsed.category}
+                    onChangeText={(v: string) => setParsed({ ...parsed, category: v })}
+                  />
+                </View>
+
+                {parsed.type === "expense" && (
+                  <View>
+                    <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                      <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>
+                        SPENDING LOCATION {parsed.locationLabel ? `(${parsed.locationLabel})` : "(OPTIONAL / USER INPUT)"}
+                      </Text>
+                      {parsed.locationLabel ? (
+                        <TouchableOpacity onPress={() => setParsed({ ...parsed, locationLabel: undefined })}>
+                          <Text style={{ fontSize: 11, color: theme.primary, fontWeight: "700" }}>Clear</Text>
+                        </TouchableOpacity>
+                      ) : null}
+                    </View>
+                    <TextInput
+                      style={[
+                        styles.fieldInput,
+                        { backgroundColor: theme.background, borderColor: theme.border, color: theme.text },
+                      ]}
+                      placeholder="Input location or tap chip below..."
+                      placeholderTextColor={theme.textMuted}
+                      value={parsed.locationLabel || ""}
+                      onChangeText={(v: string) => setParsed({ ...parsed, locationLabel: v })}
+                    />
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      style={{ marginTop: 6 }}
+                      contentContainerStyle={{ gap: 6 }}
+                    >
+                      {["Home / Hostel", "KNUST Campus", "Tech Junction", "Kejetia Market", "Ayigya Commute", "Adum Business District"].map((loc) => {
+                        const isSelected = parsed.locationLabel === loc;
+                        return (
+                          <TouchableOpacity
+                            key={loc}
+                            style={[
+                              styles.locChip,
+                              {
+                                backgroundColor: isSelected ? theme.primaryLight : theme.background,
+                                borderColor: isSelected ? theme.primary : theme.border,
+                              },
+                            ]}
+                            onPress={() => setParsed({ ...parsed, locationLabel: isSelected ? undefined : loc })}
+                          >
+                            <Text style={{ fontSize: 11, fontWeight: "700", color: isSelected ? theme.primary : theme.textSecondary }}>
+                              {loc}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </ScrollView>
+                  </View>
+                )}
+
+                {parsed.transactionId && (
+                  <View>
+                    <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>TRANSACTION ID</Text>
+                    <Text style={[styles.metaValue, { color: theme.text }]}>{parsed.transactionId}</Text>
+                  </View>
+                )}
               </View>
 
-              <TouchableOpacity style={styles.saveButton} onPress={saveTransaction}>
-                <Text style={styles.saveButtonText}>💾 Save Transaction</Text>
+              <TouchableOpacity
+                style={[styles.saveDirectBtn, { backgroundColor: "#10B981" }]}
+                onPress={handleSave}
+              >
+                <Feather name="check" size={16} color="#FFFFFF" />
+                <Text style={styles.saveDirectText}>SAVE TO TRANSACTIONS</Text>
               </TouchableOpacity>
             </>
+          ) : (
+            <View style={{ padding: 16, alignItems: "center" }}>
+              <Feather name="alert-circle" size={24} color="#F43F5E" />
+              <Text style={[styles.noFinText, { color: theme.textSecondary }]}>
+                Could not detect financial fields. Try another MoMo or bank alert.
+              </Text>
+            </View>
           )}
-        </>
+        </View>
       )}
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20 },
-  title: { fontSize: 26, fontWeight: "800", marginTop: 16, marginBottom: 4 },
-  subtitle: { fontSize: 14, marginBottom: 20, lineHeight: 20 },
-  label: { fontSize: 11, fontWeight: "700", letterSpacing: 1, marginTop: 16, marginBottom: 8 },
-  input: { height: 50, borderRadius: 14, paddingHorizontal: 14, fontSize: 15, borderWidth: 1 },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 16,
+  },
+  backBtn: { flexDirection: "row", alignItems: "center", gap: 4 },
+  backText: { fontSize: 13, fontWeight: "700" },
+  title: { fontSize: 18, fontWeight: "900" },
 
-  guideCard: { borderRadius: 16, padding: 16, marginBottom: 20 },
-  guideTitle: { fontWeight: "700", fontSize: 14, marginBottom: 10 },
-  guideStep: { fontSize: 13, marginBottom: 4, paddingLeft: 4 },
+  card: { padding: 18, borderRadius: 24, borderWidth: 1 },
+  cardTopRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  cardHeading: { fontSize: 15, fontWeight: "800", marginTop: 2 },
+  iconCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  metaLabel: { fontSize: 10, fontWeight: "800", letterSpacing: 0.8 },
+  sectionSubLabel: { fontSize: 10, fontWeight: "800", letterSpacing: 0.6 },
+  guideText: { fontSize: 12, lineHeight: 18, marginTop: 10 },
 
-  smsInput: { borderRadius: 14, padding: 14, fontSize: 14, borderWidth: 1, minHeight: 100, textAlignVertical: "top", lineHeight: 20 },
-  smsButtons: { flexDirection: "row", gap: 10, marginTop: 12 },
-  pasteBtn: { flex: 1, height: 46, borderRadius: 12, borderWidth: 1, justifyContent: "center", alignItems: "center" },
-  pasteBtnText: { fontWeight: "700", fontSize: 14 },
-  analyzeBtn: { flex: 1, height: 46, borderRadius: 12, backgroundColor: "#7C3AED", justifyContent: "center", alignItems: "center" },
-  analyzeBtnText: { color: "#fff", fontWeight: "700", fontSize: 14 },
+  statusBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    marginTop: 12,
+  },
+  statusDot: { width: 7, height: 7, borderRadius: 4 },
+  statusText: { fontSize: 11, fontWeight: "800" },
 
-  resultBanner: { padding: 14, borderRadius: 14, marginTop: 20, marginBottom: 4 },
-  resultBannerText: { color: "#34D399", fontWeight: "600", fontSize: 13 },
+  permissionBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 11,
+    borderRadius: 12,
+    marginTop: 10,
+  },
+  permissionBtnText: { color: "#FFFFFF", fontSize: 12, fontWeight: "800" },
 
-  notFinancialCard: { borderRadius: 16, padding: 24, alignItems: "center", marginTop: 20 },
-  notFinancialIcon: { fontSize: 40, marginBottom: 12 },
-  notFinancialText: { fontSize: 14, textAlign: "center", lineHeight: 22 },
+  samplePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  sampleText: { fontSize: 11, fontWeight: "700" },
 
-  typeRow: { flexDirection: "row", gap: 12 },
-  typeBtn: { flex: 1, padding: 14, borderRadius: 12, alignItems: "center", borderWidth: 1.5 },
+  toastCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    padding: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    marginBottom: 12,
+  },
+  toastText: { fontSize: 12, fontWeight: "700", flex: 1 },
 
-  categoryGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  catChip: { flexDirection: "row", alignItems: "center", padding: 10, borderRadius: 12, borderWidth: 1.5, gap: 6 },
+  recentHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  viewAllText: { fontSize: 11, fontWeight: "800" },
+  recentItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  recentTitle: { fontSize: 12, fontWeight: "800" },
+  recentProvider: { fontSize: 10, marginTop: 2 },
+  recentAmount: { fontSize: 13, fontWeight: "900" },
 
-  saveButton: { backgroundColor: "#059669", padding: 16, borderRadius: 16, alignItems: "center", marginTop: 24 },
-  saveButtonText: { color: "#FFFFFF", fontWeight: "700", fontSize: 16 },
+  inputHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  pasteBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  pasteBtnText: { fontSize: 11, fontWeight: "800" },
+
+  smsInput: {
+    minHeight: 80,
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 12,
+    fontSize: 13,
+    fontWeight: "600",
+    textAlignVertical: "top",
+  },
+  actionRow: { flexDirection: "row", gap: 10, marginTop: 12 },
+  analyzeBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  analyzeText: { color: "#FFFFFF", fontSize: 13, fontWeight: "800" },
+  clearBtn: {
+    paddingHorizontal: 18,
+    borderRadius: 12,
+    borderWidth: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  clearText: { fontSize: 13, fontWeight: "700" },
+
+  resultHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(100, 116, 139, 0.15)",
+  },
+  resultDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: "#10B981" },
+  typePill: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
+  typePillText: { fontSize: 10, fontWeight: "900" },
+
+  fieldLabel: { fontSize: 9, fontWeight: "800", letterSpacing: 0.5, marginBottom: 3 },
+  fieldInput: { height: 40, borderRadius: 10, borderWidth: 1, paddingHorizontal: 10, fontSize: 13 },
+  metaValue: { fontSize: 12, fontWeight: "700", marginTop: 2 },
+
+  saveDirectBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 13,
+    borderRadius: 14,
+    marginTop: 6,
+  },
+  saveDirectText: { color: "#FFFFFF", fontSize: 12, fontWeight: "900" },
+  noFinText: { fontSize: 12, marginTop: 8, textAlign: "center" },
+  locChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginRight: 6,
+  },
 });

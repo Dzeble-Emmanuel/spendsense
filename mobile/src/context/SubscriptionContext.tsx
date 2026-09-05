@@ -82,6 +82,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
             category: sub.category,
             description: `Auto-logged: ${sub.billingCycle} subscription`,
             date: today,
+            isSubscription: true,
           });
           // Advance next due date
           const next = calculateNextDueDate(sub.nextDueDate, sub.billingCycle);

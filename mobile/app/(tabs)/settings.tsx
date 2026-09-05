@@ -2,21 +2,25 @@ import { useState } from "react";
 import {
   View,
   Text,
-  StyleSheet,
   ScrollView,
+  StyleSheet,
   Switch,
   TouchableOpacity,
   Modal,
   Alert,
-  Image,
 } from "react-native";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
+import { Feather, Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../../src/hooks/useTheme";
 import { useSettings } from "../../src/hooks/useSettings";
+import { useFinance } from "../../src/hooks/useFinance";
 import { useBiometric } from "../../src/hooks/useBiometric";
-import { SUPPORTED_CURRENCIES, Currency } from "../../src/context/SettingsContext";
+import { useAuth } from "../../src/context/AuthContext";
+import { SUPPORTED_CURRENCIES, Currency } from "../../src/types/finance";
+import { useSubFeatureBack } from "../../src/hooks/useSubFeatureBack";
 
-export default function Settings() {
+export default function SettingsScreen() {
   const { theme } = useTheme();
   const {
     darkMode,
@@ -27,168 +31,290 @@ export default function Settings() {
     setBiometricEnabled,
     currency,
     setCurrency,
+    exchangeRates,
   } = useSettings();
+  const { clearAllData, seedDemoData } = useFinance();
   const { isAvailable: biometricAvailable, biometricType, authenticate } = useBiometric();
+  const { logout, user } = useAuth();
+  const insets = useSafeAreaInsets();
+  const handleBack = useSubFeatureBack("/(tabs)/profile");
 
   const [showCurrencyModal, setShowCurrencyModal] = useState(false);
 
-  async function handleBiometricToggle() {
+  const handleRestoreDemoData = () => {
+    Alert.alert(
+      "Restore Demo Data",
+      "Reset your vault with the comprehensive Ghanaian demo dataset powering all modules (Tech Junction, KNUST, Kejetia, Ayigya, Price Shock Radar, and Silent Leak Map)?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Restore Data",
+          onPress: async () => {
+            await seedDemoData();
+            Alert.alert("Demo Data Loaded", "All modules and screens are now populated with rich sample data.");
+          },
+        },
+      ]
+    );
+  };
+
+  const handleBiometricToggle = async () => {
     if (!biometricEnabled) {
-      const ok = await authenticate("Authenticate to enable biometric lock");
+      const ok = await authenticate("Authenticate to enable biometric protection");
       if (ok) {
         setBiometricEnabled(true);
-        Alert.alert("✅ Enabled", `${biometricType === "facial" ? "Face ID" : "Fingerprint"} lock is active.`);
+        Alert.alert("Enabled", "Biometric app protection is active.");
       } else {
-        Alert.alert("Failed", "Authentication failed. Biometric lock not enabled.");
+        Alert.alert("Failed", "Biometric verification unsuccessful.");
       }
     } else {
       setBiometricEnabled(false);
-      Alert.alert("Disabled", "Biometric lock turned off.");
+      Alert.alert("Disabled", "Biometric app protection turned off.");
     }
-  }
+  };
 
-  const biometricLabel = biometricType === "facial" ? "Face ID Lock" : "Fingerprint Lock";
+  const handleClearVault = () => {
+    Alert.alert(
+      "Erase Vault Records",
+      "Are you sure you want to permanently erase all transactions, recurring subscriptions, and budget limits? This cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Erase All Records",
+          style: "destructive",
+          onPress: async () => {
+            await clearAllData();
+            Alert.alert("Vault Cleared", "All local ledger records have been reset.");
+          },
+        },
+      ]
+    );
+  };
+
+  const handleSignOut = () => {
+    Alert.alert("Sign Out", "Are you sure you want to sign out of your SpendSense vault?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Sign Out",
+        style: "destructive",
+        onPress: async () => {
+          await logout();
+          router.replace("/(auth)/login");
+        },
+      },
+    ]);
+  };
+
+  const topPadding = insets.top > 0 ? insets.top + 10 : 20;
 
   return (
     <ScrollView
-      style={[styles.container, { backgroundColor: theme.background }]}
-      contentContainerStyle={{ paddingBottom: 40 }}
+      style={{ flex: 1, backgroundColor: theme.background }}
       showsVerticalScrollIndicator={false}
+      contentContainerStyle={{
+        paddingTop: topPadding,
+        paddingBottom: 50,
+        paddingHorizontal: 18,
+      }}
     >
-      {/* Header */}
-      <View style={styles.headerRow}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Text style={[styles.backText, { color: theme.text }]}>‹ Back</Text>
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.backBtn} onPress={handleBack}>
+          <Feather name="arrow-left" size={18} color={theme.text} />
+          <Text style={[styles.backText, { color: theme.textSecondary }]}>Back</Text>
         </TouchableOpacity>
-        <Text style={[styles.title, { color: theme.text }]}>Settings</Text>
-        <View style={{ width: 50 }} />
+        <Text style={[styles.title, { color: theme.text }]}>Preferences & Settings</Text>
+        <View style={{ width: 45 }} />
       </View>
 
-      {/* Preferences Section */}
-      <View style={[styles.card, { backgroundColor: theme.card }]}>
-        <Text style={[styles.heading, { color: theme.text }]}>⚙️ Preferences</Text>
+      {/* General Preferences */}
+      <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]}>
+        <Text style={[styles.sectionHeading, { color: theme.textSecondary }]}>
+          GENERAL PREFERENCES
+        </Text>
 
-        {/* Currency Option */}
+        {/* Currency Picker */}
         <TouchableOpacity
-          style={styles.optionRow}
+          style={[styles.optionRow, { backgroundColor: theme.background, borderColor: theme.border }]}
           onPress={() => setShowCurrencyModal(true)}
           activeOpacity={0.7}
         >
           <View style={styles.optionLeft}>
-            <Text style={styles.optionIcon}>💱</Text>
-            <Text style={[styles.optionText, { color: theme.text }]}>Currency</Text>
+            <View style={[styles.optionIconBg, { backgroundColor: "rgba(245, 158, 11, 0.12)" }]}>
+              <Feather name="dollar-sign" size={16} color="#F59E0B" />
+            </View>
+            <View>
+              <Text style={[styles.optionTitle, { color: theme.text }]}>Display Currency</Text>
+              <Text style={[styles.optionSub, { color: theme.textSecondary }]}>
+                Controls values across all screens
+              </Text>
+            </View>
           </View>
-          <View style={styles.optionRight}>
-            <View style={[styles.badge, { backgroundColor: theme.primaryLight }]}>
-              <Text style={[styles.badgeText, { color: theme.primary }]}>
+
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+            <View style={[styles.currencyBadge, { backgroundColor: theme.primaryLight }]}>
+              <Text style={[styles.currencyBadgeText, { color: theme.primary }]}>
                 {currency.code} ({currency.symbol})
               </Text>
             </View>
-            <Text style={[styles.arrow, { color: theme.textSecondary }]}>›</Text>
+            <Feather name="chevron-right" size={15} color={theme.textMuted} />
           </View>
         </TouchableOpacity>
 
-        {/* Dark Mode Option */}
-        <View style={styles.optionRow}>
+        {/* Dark Theme Switch */}
+        <View style={[styles.optionRow, { backgroundColor: theme.background, borderColor: theme.border }]}>
           <View style={styles.optionLeft}>
-            <Text style={styles.optionIcon}>{darkMode ? "🌙" : "☀️"}</Text>
-            <Text style={[styles.optionText, { color: theme.text }]}>Dark Mode</Text>
+            <View style={[styles.optionIconBg, { backgroundColor: "rgba(59, 130, 246, 0.12)" }]}>
+              <Feather name={darkMode ? "moon" : "sun"} size={16} color="#3B82F6" />
+            </View>
+            <View>
+              <Text style={[styles.optionTitle, { color: theme.text }]}>Dark Theme</Text>
+              <Text style={[styles.optionSub, { color: theme.textSecondary }]}>
+                {darkMode ? "Obsidian slate canvas" : "Light mode canvas"}
+              </Text>
+            </View>
           </View>
+
           <Switch
             value={darkMode}
             onValueChange={toggleDarkMode}
-            trackColor={{ false: "#D1D5DB", true: "#2563EB" }}
-            thumbColor={darkMode ? "#FFFFFF" : "#F3F4F6"}
+            trackColor={{ false: theme.border, true: theme.primary }}
           />
         </View>
 
-        {/* Notifications Option */}
-        <View style={styles.optionRow}>
+        {/* Push Notifications Switch */}
+        <View style={[styles.optionRow, { backgroundColor: theme.background, borderColor: theme.border }]}>
           <View style={styles.optionLeft}>
-            <Text style={styles.optionIcon}>🔔</Text>
-            <Text style={[styles.optionText, { color: theme.text }]}>Push Notifications</Text>
+            <View style={[styles.optionIconBg, { backgroundColor: "rgba(139, 92, 246, 0.12)" }]}>
+              <Feather name="bell" size={16} color="#8B5CF6" />
+            </View>
+            <View>
+              <Text style={[styles.optionTitle, { color: theme.text }]}>Alert Notifications</Text>
+              <Text style={[styles.optionSub, { color: theme.textSecondary }]}>
+                Renewals & budget overspending
+              </Text>
+            </View>
           </View>
+
           <Switch
             value={notifications}
             onValueChange={toggleNotifications}
-            trackColor={{ false: "#D1D5DB", true: "#2563EB" }}
-            thumbColor={notifications ? "#FFFFFF" : "#F3F4F6"}
+            trackColor={{ false: theme.border, true: theme.primary }}
           />
         </View>
       </View>
 
-      {/* Security Section */}
-      <View style={[styles.card, { backgroundColor: theme.card }]}>
-        <Text style={[styles.heading, { color: theme.text }]}>🔒 Security</Text>
+      {/* Security & Biometrics */}
+      <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border, marginTop: 14 }]}>
+        <Text style={[styles.sectionHeading, { color: theme.textSecondary }]}>
+          BIOMETRIC PROTECTION & SECURITY
+        </Text>
 
-        {/* Biometric Toggle */}
-        {biometricAvailable ? (
-          <View style={styles.optionRow}>
-            <View style={styles.optionLeft}>
-              <Text style={styles.optionIcon}>{biometricType === "facial" ? "🔓" : "👆"}</Text>
-              <Text style={[styles.optionText, { color: theme.text }]}>{biometricLabel}</Text>
+        <View style={[styles.optionRow, { backgroundColor: theme.background, borderColor: theme.border }]}>
+          <View style={styles.optionLeft}>
+            <View style={[styles.optionIconBg, { backgroundColor: "rgba(16, 185, 129, 0.12)" }]}>
+              <Ionicons name="finger-print-outline" size={18} color="#10B981" />
             </View>
-            <Switch
-              value={biometricEnabled}
-              onValueChange={handleBiometricToggle}
-              trackColor={{ false: "#D1D5DB", true: "#7C3AED" }}
-              thumbColor={biometricEnabled ? "#FFFFFF" : "#F3F4F6"}
-            />
+            <View>
+              <Text style={[styles.optionTitle, { color: theme.text }]}>Biometric App Lock</Text>
+              <Text style={[styles.optionSub, { color: theme.textSecondary }]}>
+                Verification required on launch
+              </Text>
+            </View>
           </View>
-        ) : (
-          <Text style={[styles.subtext, { color: theme.textSecondary }]}>
-            Biometric authentication is not supported or configured on this device.
-          </Text>
-        )}
-      </View>
 
-      {/* Data Management Section */}
-      <View style={[styles.card, { backgroundColor: theme.card }]}>
-        <Text style={[styles.heading, { color: theme.text }]}>💾 Data & Reports</Text>
+          <Switch
+            value={biometricEnabled}
+            onValueChange={handleBiometricToggle}
+            trackColor={{ false: theme.border, true: "#10B981" }}
+          />
+        </View>
 
         <TouchableOpacity
-          style={styles.optionRow}
-          onPress={() => router.push("/(tabs)/reports")}
-          activeOpacity={0.7}
+          style={[styles.testLockBtn, { backgroundColor: theme.subCard, borderColor: theme.border }]}
+          onPress={() => router.push("/lock")}
         >
-          <View style={styles.optionLeft}>
-            <Text style={styles.optionIcon}>📄</Text>
-            <Text style={[styles.optionText, { color: theme.text }]}>Export Reports & CSV</Text>
-          </View>
-          <Text style={[styles.arrow, { color: theme.textSecondary }]}>›</Text>
+          <Ionicons name="shield-checkmark-outline" size={15} color={theme.primary} />
+          <Text style={[styles.testLockText, { color: theme.primary }]}>
+            Test Biometric Lock Screen
+          </Text>
         </TouchableOpacity>
       </View>
 
-      {/* About Section */}
-      <View style={[styles.card, { backgroundColor: theme.card, alignItems: "center" }]}>
-        <Image
-          source={require("../../assets/logo.png")}
-          style={{ width: 180, height: 90, marginBottom: 8 }}
-          resizeMode="contain"
-        />
-        <Text style={[styles.aboutText, { color: theme.text }]}>SpendSense v1.1.0</Text>
-        <Text style={[styles.subtext, { color: theme.textSecondary, textAlign: "center" }]}>
-          Intelligent Personal Finance Analytics and Prediction System Using Machine Learning
+      {/* Vault Data & Ledger Reset */}
+      <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border, marginTop: 14 }]}>
+        <Text style={[styles.sectionHeading, { color: "#F43F5E" }]}>
+          VAULT DATA & LEDGER RESET
         </Text>
+        <Text style={[styles.resetDesc, { color: theme.textSecondary }]}>
+          Wipe all stored transactions, recurring subscriptions, and custom budget limits from
+          storage.
+        </Text>
+
+        <TouchableOpacity
+          style={[styles.loadDemoBtn, { backgroundColor: theme.primaryLight, borderColor: theme.primary, marginBottom: 8 }]}
+          onPress={handleRestoreDemoData}
+          activeOpacity={0.8}
+        >
+          <Feather name="refresh-cw" size={15} color={theme.primary} />
+          <Text style={[styles.loadDemoText, { color: theme.primary }]}>Load Comprehensive Demo Data</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.eraseBtn}
+          onPress={handleClearVault}
+          activeOpacity={0.8}
+        >
+          <Feather name="trash-2" size={15} color="#F43F5E" />
+          <Text style={styles.eraseText}>Erase All Vault Records</Text>
+        </TouchableOpacity>
       </View>
 
-      {/* Currency Selection Modal */}
+      {/* Account Session & Sign Out */}
+      <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border, marginTop: 14 }]}>
+        <Text style={[styles.sectionHeading, { color: theme.textSecondary }]}>
+          ACCOUNT SESSION
+        </Text>
+        <Text style={{ color: theme.text, fontSize: 15, fontWeight: "800" }}>
+          {user?.fullName || "Account User"}
+        </Text>
+        <Text style={{ color: theme.textSecondary, fontSize: 12, marginTop: 2, marginBottom: 12 }}>
+          {user?.email || "user@spendsense.app"}
+        </Text>
+
+        <TouchableOpacity
+          style={styles.signOutBtn}
+          onPress={handleSignOut}
+          activeOpacity={0.8}
+        >
+          <Feather name="log-out" size={15} color="#F43F5E" />
+          <Text style={styles.signOutText}>Sign Out of Vault</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Currency Modal */}
       <Modal visible={showCurrencyModal} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
-          <View style={[styles.modal, { backgroundColor: theme.card }]}>
-            <Text style={[styles.modalTitle, { color: theme.text }]}>Select Currency</Text>
-            <Text style={[styles.modalSub, { color: theme.textSecondary }]}>
-              All transaction amounts, balances, and reports will display in your chosen currency.
-            </Text>
+          <View style={[styles.modalBox, { backgroundColor: theme.card, borderColor: theme.border }]}>
+            <View style={styles.modalTop}>
+              <View>
+                <Text style={[styles.modalHeading, { color: theme.text }]}>Select Base Currency</Text>
+                <Text style={[styles.modalSub, { color: theme.textSecondary }]}>
+                  Updated across all calculations
+                </Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowCurrencyModal(false)}>
+                <Feather name="x" size={20} color={theme.textMuted} />
+              </TouchableOpacity>
+            </View>
 
-            <ScrollView style={{ maxHeight: 350 }} showsVerticalScrollIndicator={false}>
+            <ScrollView style={{ maxHeight: 300 }} showsVerticalScrollIndicator={false}>
               {SUPPORTED_CURRENCIES.map((c) => {
                 const isSelected = currency.code === c.code;
                 return (
                   <TouchableOpacity
                     key={c.code}
                     style={[
-                      styles.currencyOption,
+                      styles.currRow,
                       {
                         backgroundColor: isSelected ? theme.primaryLight : theme.background,
                         borderColor: isSelected ? theme.primary : theme.border,
@@ -199,23 +325,22 @@ export default function Settings() {
                       setShowCurrencyModal(false);
                     }}
                   >
-                    <Text style={styles.currencySymbol}>{c.symbol}</Text>
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.currencyName, { color: theme.text }]}>{c.name}</Text>
-                      <Text style={[styles.currencyCode, { color: theme.textSecondary }]}>{c.code}</Text>
+                    <View style={styles.currLeft}>
+                      <Text style={[styles.currSymbol, { color: theme.text }]}>{c.symbol}</Text>
+                      <View>
+                        <Text style={[styles.currName, { color: theme.text }]}>{c.name}</Text>
+                        <Text style={[styles.currCode, { color: theme.textSecondary }]}>
+                          {c.code === "GHS"
+                            ? "GHS • Base Currency (1.0)"
+                            : `${c.code} • 1 GHS ≈ ${(exchangeRates?.[c.code] ?? 1).toFixed(3)}`}
+                        </Text>
+                      </View>
                     </View>
-                    {isSelected && <Text style={{ color: theme.primary, fontSize: 18, fontWeight: "800" }}>✓</Text>}
+                    {isSelected && <Feather name="check" size={16} color={theme.primary} />}
                   </TouchableOpacity>
                 );
               })}
             </ScrollView>
-
-            <TouchableOpacity
-              style={[styles.closeModalBtn, { borderColor: theme.border }]}
-              onPress={() => setShowCurrencyModal(false)}
-            >
-              <Text style={[styles.closeModalText, { color: theme.text }]}>Close</Text>
-            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -224,38 +349,118 @@ export default function Settings() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20 },
-  headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 16, marginBottom: 20 },
-  backBtn: { paddingVertical: 6, paddingRight: 10 },
-  backText: { fontSize: 16, fontWeight: "600" },
-  title: { fontSize: 24, fontWeight: "800" },
+  container: { flex: 1, paddingHorizontal: 18, paddingTop: 12 },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 16,
+  },
+  backBtn: { flexDirection: "row", alignItems: "center", gap: 4 },
+  backText: { fontSize: 13, fontWeight: "700" },
+  title: { fontSize: 18, fontWeight: "900" },
 
-  card: { padding: 20, borderRadius: 20, marginBottom: 16 },
-  heading: { fontSize: 17, fontWeight: "700", marginBottom: 16 },
+  card: { padding: 18, borderRadius: 24, borderWidth: 1 },
+  sectionHeading: { fontSize: 10, fontWeight: "800", letterSpacing: 0.8, marginBottom: 10 },
 
-  optionRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 12, borderBottomWidth: 0.5, borderBottomColor: "#334155" },
-  optionLeft: { flexDirection: "row", alignItems: "center", gap: 12 },
-  optionIcon: { fontSize: 20 },
-  optionText: { fontSize: 15, fontWeight: "600" },
-  optionRight: { flexDirection: "row", alignItems: "center", gap: 8 },
-  arrow: { fontSize: 22, fontWeight: "300" },
+  optionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    marginBottom: 8,
+  },
+  optionLeft: { flexDirection: "row", alignItems: "center", gap: 12, flex: 1 },
+  optionIconBg: {
+    width: 36,
+    height: 36,
+    borderRadius: 11,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  optionTitle: { fontSize: 13, fontWeight: "800" },
+  optionSub: { fontSize: 10, marginTop: 1 },
+  currencyBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
+  currencyBadgeText: { fontSize: 11, fontWeight: "800" },
 
-  badge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10 },
-  badgeText: { fontSize: 12, fontWeight: "700" },
+  testLockBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    marginTop: 4,
+  },
+  testLockText: { fontSize: 12, fontWeight: "800" },
 
-  aboutText: { fontSize: 16, fontWeight: "700", marginBottom: 4 },
-  subtext: { fontSize: 13, lineHeight: 20 },
+  resetDesc: { fontSize: 11, lineHeight: 16, marginBottom: 12 },
+  loadDemoBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 13,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+  loadDemoText: { fontSize: 12, fontWeight: "800" },
+  eraseBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 13,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(244, 63, 94, 0.4)",
+    backgroundColor: "rgba(244, 63, 94, 0.08)",
+  },
+  eraseText: { color: "#F43F5E", fontSize: 12, fontWeight: "800" },
+
+  signOutBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: "rgba(244, 63, 94, 0.1)",
+    borderWidth: 1,
+    borderColor: "rgba(244, 63, 94, 0.3)",
+    paddingVertical: 14,
+    borderRadius: 14,
+  },
+  signOutText: { color: "#F43F5E", fontWeight: "800", fontSize: 13 },
 
   // Modal
-  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.7)", justifyContent: "flex-end" },
-  modal: { borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24 },
-  modalTitle: { fontSize: 22, fontWeight: "800", marginBottom: 4 },
-  modalSub: { fontSize: 13, marginBottom: 16, lineHeight: 18 },
-
-  currencyOption: { flexDirection: "row", alignItems: "center", padding: 14, borderRadius: 14, marginBottom: 8, borderWidth: 1.5, gap: 14 },
-  currencySymbol: { fontSize: 22, fontWeight: "700", width: 40, textAlign: "center" },
-  currencyName: { fontSize: 15, fontWeight: "700" },
-  currencyCode: { fontSize: 12, marginTop: 2 },
-  closeModalBtn: { padding: 14, borderRadius: 14, borderWidth: 1, alignItems: "center", marginTop: 16 },
-  closeModalText: { fontWeight: "700" },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    justifyContent: "center",
+    padding: 20,
+  },
+  modalBox: { borderRadius: 24, borderWidth: 1, padding: 20 },
+  modalTop: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  modalHeading: { fontSize: 16, fontWeight: "900" },
+  modalSub: { fontSize: 11, marginTop: 2 },
+  currRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    marginBottom: 6,
+  },
+  currLeft: { flexDirection: "row", alignItems: "center", gap: 12 },
+  currSymbol: { fontSize: 18, fontWeight: "900", width: 35, textAlign: "center" },
+  currName: { fontSize: 13, fontWeight: "700" },
+  currCode: { fontSize: 10, marginTop: 1 },
 });

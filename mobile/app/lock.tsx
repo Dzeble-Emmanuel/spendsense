@@ -1,165 +1,320 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   View,
   Text,
+  TextInput,
   TouchableOpacity,
   StyleSheet,
-  ActivityIndicator,
-  Image,
+  Alert,
 } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
+import { Feather, Ionicons } from "@expo/vector-icons";
+import { useTheme } from "../src/hooks/useTheme";
 import { useBiometric } from "../src/hooks/useBiometric";
+import { useAuth } from "../src/hooks/useAuth";
 
 export default function LockScreen() {
-  const { biometricType, authenticate } = useBiometric();
-  const [isAuthenticating, setIsAuthenticating] = useState(false);
+  const { theme, toggleDarkMode, isDark } = useTheme();
+  const { authenticate, biometricType } = useBiometric();
+  const { logout } = useAuth();
+
+  const [pinMode, setPinMode] = useState(false);
+  const [pin, setPin] = useState("");
   const [failed, setFailed] = useState(false);
+  const [isAuthenticating, setIsAuthenticating] = useState(false);
 
-  const icon = biometricType === "facial" ? "🔓" : "👆";
-  const label =
-    biometricType === "facial" ? "Unlock with Face ID" :
-    biometricType === "iris"   ? "Unlock with Iris" :
-    "Unlock with Fingerprint";
+  useEffect(() => {
+    handleBiometricUnlock();
+  }, []);
 
-  async function handleUnlock() {
+  const handleBiometricUnlock = async () => {
     setIsAuthenticating(true);
     setFailed(false);
-    const success = await authenticate();
+    const ok = await authenticate("Unlock SpendSense Personal Vault");
     setIsAuthenticating(false);
-    if (success) {
+    if (ok) {
       router.replace("/(tabs)");
     } else {
       setFailed(true);
     }
-  }
+  };
+
+  const handlePinSubmit = () => {
+    if (pin.length >= 4) {
+      router.replace("/(tabs)");
+    } else {
+      setFailed(true);
+      Alert.alert("Invalid PIN", "Please enter a 4-digit PIN.");
+    }
+  };
+
+  const handleSignOut = async () => {
+    await logout();
+    router.replace("/(auth)/login");
+  };
 
   return (
-    <LinearGradient colors={["#0F172A", "#1E293B", "#0F172A"]} style={styles.container}>
-      {/* Official SpendSense Logo */}
-      <Image
-        source={require("../assets/logo.png")}
-        style={styles.logoImage}
-        resizeMode="contain"
-      />
-      <Text style={styles.tagline}>Your finances, secured.</Text>
-
-      {/* Lock Icon */}
-      <View style={styles.lockCircle}>
-        <Text style={styles.lockIcon}>🔒</Text>
-      </View>
-
-      <Text style={styles.subtitle}>
-        App is locked{"\n"}Authenticate to continue
-      </Text>
-
-      {/* Error */}
-      {failed && (
-        <View style={styles.errorBox}>
-          <Text style={styles.errorText}>
-            ⚠️ Authentication failed. Please try again.
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
+      {/* Top Controls Bar */}
+      <View style={styles.topBar}>
+        <View style={[styles.securityBadge, { backgroundColor: theme.primaryLight }]}>
+          <Feather name="shield" size={13} color={theme.primary} />
+          <Text style={[styles.securityBadgeText, { color: theme.primary }]}>
+            Biometric Protection Active
           </Text>
         </View>
-      )}
 
-      {/* Unlock Button */}
-      <TouchableOpacity
-        style={[styles.unlockButton, isAuthenticating && styles.buttonDim]}
-        onPress={handleUnlock}
-        disabled={isAuthenticating}
-        activeOpacity={0.8}
-      >
-        <LinearGradient
-          colors={["#2563EB", "#7C3AED"]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 0 }}
-          style={styles.buttonGradient}
+        <TouchableOpacity
+          style={[styles.themeBtn, { backgroundColor: theme.card, borderColor: theme.border }]}
+          onPress={toggleDarkMode}
         >
-          {isAuthenticating ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <>
-              <Text style={styles.buttonIcon}>{icon}</Text>
-              <Text style={styles.buttonText}>{label}</Text>
-            </>
-          )}
-        </LinearGradient>
-      </TouchableOpacity>
+          <Feather name={isDark ? "sun" : "moon"} size={13} color={theme.text} />
+          <Text style={[styles.themeBtnText, { color: theme.text }]}>
+            {isDark ? "Dark" : "Light"}
+          </Text>
+        </TouchableOpacity>
+      </View>
 
-      <Text style={styles.hint}>
-        You can also use your device PIN as a fallback
-      </Text>
-    </LinearGradient>
+      {/* Main Lock Card */}
+      <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]}>
+        <View style={styles.brandBox}>
+          <View style={[styles.brandLogo, { backgroundColor: theme.primary }]}>
+            <Ionicons name="wallet" size={26} color="#FFFFFF" />
+          </View>
+          <Text style={[styles.appName, { color: theme.text }]}>SpendSense</Text>
+          <Text style={[styles.appSub, { color: theme.textSecondary }]}>
+            Personal finance vault is locked
+          </Text>
+        </View>
+
+        {/* Biometric Sensor Circle */}
+        <TouchableOpacity
+          style={[styles.sensorCircle, { backgroundColor: theme.background, borderColor: theme.border }]}
+          onPress={handleBiometricUnlock}
+          activeOpacity={0.8}
+        >
+          <Ionicons
+            name={biometricType === "facial" ? "scan" : "finger-print"}
+            size={44}
+            color={theme.primary}
+          />
+        </TouchableOpacity>
+
+        {/* Instructions */}
+        <View style={{ alignItems: "center" }}>
+          <Text style={[styles.modeTitle, { color: theme.text }]}>
+            {pinMode ? "Enter Device PIN" : "Biometric Authentication"}
+          </Text>
+          <Text style={[styles.modeDesc, { color: theme.textSecondary }]}>
+            {pinMode
+              ? "Enter your 4-digit security PIN to unlock"
+              : "Scan fingerprint or face to access records"}
+          </Text>
+        </View>
+
+        {/* Error Feedback */}
+        {failed && (
+          <View style={styles.errorBox}>
+            <Feather name="alert-circle" size={14} color="#F43F5E" />
+            <Text style={styles.errorText}>Authentication unsuccessful. Try PIN or rescan.</Text>
+          </View>
+        )}
+
+        {/* Controls */}
+        {!pinMode ? (
+          <View style={{ gap: 10, marginTop: 6 }}>
+            <TouchableOpacity
+              style={[styles.unlockBtn, { backgroundColor: theme.primary }]}
+              onPress={handleBiometricUnlock}
+              disabled={isAuthenticating}
+            >
+              <Ionicons name="finger-print" size={18} color="#FFFFFF" />
+              <Text style={styles.unlockBtnText}>
+                {isAuthenticating ? "Scanning..." : "Unlock with Biometrics"}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.pinToggleBtn}
+              onPress={() => {
+                setPinMode(true);
+                setFailed(false);
+              }}
+            >
+              <Feather name="key" size={13} color={theme.textSecondary} />
+              <Text style={[styles.pinToggleText, { color: theme.textSecondary }]}>
+                Use 4-digit PIN instead
+              </Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View style={{ gap: 10, marginTop: 6 }}>
+            <TextInput
+              style={[styles.pinInput, { backgroundColor: theme.background, borderColor: theme.border, color: theme.text }]}
+              placeholder="••••"
+              placeholderTextColor={theme.textMuted}
+              keyboardType="numeric"
+              secureTextEntry
+              maxLength={6}
+              value={pin}
+              onChangeText={setPin}
+              autoFocus
+            />
+
+            <TouchableOpacity
+              style={[styles.unlockBtn, { backgroundColor: theme.primary }]}
+              onPress={handlePinSubmit}
+            >
+              <Text style={styles.unlockBtnText}>Confirm PIN & Unlock</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.pinToggleBtn}
+              onPress={() => {
+                setPinMode(false);
+                setPin("");
+                setFailed(false);
+              }}
+            >
+              <Text style={[styles.pinToggleText, { color: theme.textSecondary }]}>
+                Back to Biometric Sensor
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Switch Account */}
+        <TouchableOpacity style={styles.switchAccountBtn} onPress={handleSignOut}>
+          <Feather name="log-out" size={12} color={theme.textMuted} />
+          <Text style={[styles.switchAccountText, { color: theme.textMuted }]}>
+            Switch Account / Sign Out
+          </Text>
+        </TouchableOpacity>
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 24,
-  },
-  logoImage: {
-    width: 220,
-    height: 110,
-    marginBottom: 4,
-  },
-  tagline: { fontSize: 13, color: "#64748B", marginBottom: 36 },
-
-  lockCircle: {
-    width: 90,
-    height: 90,
-    borderRadius: 45,
-    backgroundColor: "rgba(255,255,255,0.05)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.1)",
+    paddingHorizontal: 20,
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 20,
   },
-  lockIcon: { fontSize: 42 },
-
-  subtitle: {
-    color: "#94A3B8",
-    textAlign: "center",
-    fontSize: 15,
-    lineHeight: 22,
-    marginBottom: 28,
-  },
-
-  errorBox: {
-    backgroundColor: "rgba(220, 38, 38, 0.15)",
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: "rgba(220, 38, 38, 0.3)",
+  topBar: {
     width: "100%",
-  },
-  errorText: { color: "#FCA5A5", fontSize: 13, textAlign: "center" },
-
-  unlockButton: {
-    width: "100%",
-    borderRadius: 16,
-    overflow: "hidden",
+    maxWidth: 360,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: 16,
   },
-  buttonDim: { opacity: 0.7 },
-  buttonGradient: {
-    height: 56,
+  securityBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 10,
+  },
+  securityBadgeText: { fontSize: 10, fontWeight: "800" },
+  themeBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  themeBtnText: { fontSize: 11, fontWeight: "700" },
+
+  card: {
+    width: "100%",
+    maxWidth: 360,
+    borderRadius: 28,
+    borderWidth: 1,
+    padding: 24,
+    alignItems: "center",
+    gap: 14,
+  },
+  brandBox: { alignItems: "center" },
+  brandLogo: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 6,
+  },
+  appName: { fontSize: 20, fontWeight: "900", letterSpacing: -0.3 },
+  appSub: { fontSize: 11, marginTop: 2 },
+
+  sensorCircle: {
+    width: 84,
+    height: 84,
+    borderRadius: 42,
+    borderWidth: 1.5,
+    justifyContent: "center",
+    alignItems: "center",
+    marginVertical: 6,
+  },
+
+  modeTitle: { fontSize: 14, fontWeight: "900" },
+  modeDesc: { fontSize: 11, textAlign: "center", marginTop: 2, paddingHorizontal: 10 },
+
+  errorBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "rgba(244, 63, 94, 0.1)",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+  },
+  errorText: { color: "#F43F5E", fontSize: 11, fontWeight: "700" },
+
+  unlockBtn: {
+    width: 280,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 10,
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: 16,
   },
-  buttonIcon: { fontSize: 22 },
-  buttonText: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "700",
-    letterSpacing: 0.5,
+  unlockBtnText: { color: "#FFFFFF", fontSize: 13, fontWeight: "900" },
+
+  pinToggleBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 6,
+  },
+  pinToggleText: { fontSize: 12, fontWeight: "700" },
+
+  pinInput: {
+    width: 280,
+    height: 48,
+    borderRadius: 14,
+    borderWidth: 1,
+    textAlign: "center",
+    fontSize: 22,
+    fontWeight: "900",
+    letterSpacing: 8,
   },
 
-  hint: { color: "#475569", fontSize: 12, textAlign: "center", lineHeight: 18 },
+  switchAccountBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(100, 116, 139, 0.15)",
+    width: "100%",
+    justifyContent: "center",
+  },
+  switchAccountText: { fontSize: 11, fontWeight: "700" },
 });

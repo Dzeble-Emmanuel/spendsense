@@ -7,9 +7,12 @@ class ExpensePredictor:
         self.model = LinearRegression()
 
     def predict_next_month(self, transactions_data: list) -> dict:
-        if not transactions_data:
+        # Cold-Start Guardrail: when user has fewer than 3 transactions
+        if not transactions_data or len(transactions_data) < 3:
             return {
+                "predicted_expenses": 0,
                 "predictedExpense": 0.0,
+                "status": "insufficient_data",
                 "confidence": "Low",
                 "trend": "Stable",
                 "slope": 0.0
@@ -18,9 +21,11 @@ class ExpensePredictor:
         df = pd.DataFrame(transactions_data)
         expenses_df = df[df["type"] == "expense"].copy()
 
-        if expenses_df.empty:
+        if expenses_df.empty or len(expenses_df) < 3:
             return {
+                "predicted_expenses": 0,
                 "predictedExpense": 0.0,
+                "status": "insufficient_data",
                 "confidence": "Low",
                 "trend": "Stable",
                 "slope": 0.0
@@ -34,8 +39,11 @@ class ExpensePredictor:
 
         if n_months < 2:
             avg_val = float(monthly_series["amount"].iloc[0])
+            pred_val = round(avg_val * 1.05, 2)
             return {
-                "predictedExpense": round(avg_val * 1.05, 2),
+                "predicted_expenses": pred_val,
+                "predictedExpense": pred_val,
+                "status": "active",
                 "confidence": "Low",
                 "trend": "Stable",
                 "slope": 0.0
@@ -51,9 +59,12 @@ class ExpensePredictor:
         slope = float(self.model.coef_[0])
         trend = "Increasing" if slope > 10 else ("Decreasing" if slope < -10 else "Stable")
         confidence = "High" if n_months >= 4 else "Medium"
+        final_pred = round(max(0.0, float(pred)), 2)
 
         return {
-            "predictedExpense": round(max(0.0, float(pred)), 2),
+            "predicted_expenses": final_pred,
+            "predictedExpense": final_pred,
+            "status": "active",
             "confidence": confidence,
             "trend": trend,
             "slope": round(slope, 2)

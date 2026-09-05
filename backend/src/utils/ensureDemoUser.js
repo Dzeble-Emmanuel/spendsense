@@ -3,6 +3,12 @@ const prisma = require("../config/database");
 
 async function ensureDemoUser() {
   try {
+    // Guard: Disable automatic demo seeding in production or if explicitly configured
+    if (process.env.DISABLE_DEMO_SEEDER === "true" || process.env.NODE_ENV === "production_clean") {
+      console.log("ℹ️ Automatic demo seeder disabled by configuration.");
+      return;
+    }
+
     const existing = await prisma.user.findUnique({
       where: { email: "demo@spendsense.app" },
     });
@@ -63,6 +69,9 @@ async function ensureDemoUser() {
       });
     }
 
+    const currentYear = new Date().getFullYear();
+    const currentMonth = new Date().getMonth() + 1;
+
     const defaultBudgets = [
       { category: "Food", amount: 500 },
       { category: "Transport", amount: 300 },
@@ -73,9 +82,19 @@ async function ensureDemoUser() {
       { category: "Education", amount: 450 },
     ];
 
+    // Seed budgets for July 2026 demo dataset
     for (const b of defaultBudgets) {
-      await prisma.budget.create({
-        data: {
+      await prisma.budget.upsert({
+        where: {
+          userId_category_month_year: {
+            userId: user.id,
+            category: b.category,
+            month: 7,
+            year: 2026,
+          },
+        },
+        update: {},
+        create: {
           category: b.category,
           amount: b.amount,
           month: 7,
@@ -85,7 +104,31 @@ async function ensureDemoUser() {
       });
     }
 
-    console.log("✅ Demo account created with 24 transactions & 7 budgets!");
+    // Also seed budgets for current active month/year if different
+    if (currentMonth !== 7 || currentYear !== 2026) {
+      for (const b of defaultBudgets) {
+        await prisma.budget.upsert({
+          where: {
+            userId_category_month_year: {
+              userId: user.id,
+              category: b.category,
+              month: currentMonth,
+              year: currentYear,
+            },
+          },
+          update: {},
+          create: {
+            category: b.category,
+            amount: b.amount,
+            month: currentMonth,
+            year: currentYear,
+            userId: user.id,
+          },
+        });
+      }
+    }
+
+    console.log("✅ Demo account created with 24 transactions & default budgets!");
   } catch (err) {
     console.log("Note: Demo user check skipped or already exists.", err.message);
   }

@@ -1,18 +1,29 @@
-import { Tabs } from "expo-router";
+import { Tabs, useRouter } from "expo-router";
+import { useEffect } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "../../src/hooks/useTheme";
+import { useAuth } from "../../src/context/AuthContext";
 
 export default function TabsLayout() {
   const { theme } = useTheme();
+  const { isAuthenticated, isLoading } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) {
+      router.replace("/(auth)/login");
+    }
+  }, [isAuthenticated, isLoading]);
 
   const hiddenScreens = [
     "add-transaction", "edit-transaction", "budget", "reports",
     "insights", "settings", "dashboard", "subscriptions",
-    "receipt-scanner", "sms-import", "forecast",
+    "receipt-scanner", "sms-import", "forecast", "what-if", "price-shocks", "leak-map",
   ];
 
   return (
     <Tabs
+      backBehavior="history"
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: theme.primary,
@@ -39,7 +50,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="transactions"
         options={{
-          title: "History",
+          title: "Transactions",
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="receipt-outline" size={size} color={color} />
           ),
@@ -57,7 +68,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="predictions"
         options={{
-          title: "AI Advice",
+          title: "Ai",
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="sparkles-outline" size={size} color={color} />
           ),
@@ -66,7 +77,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="profile"
         options={{
-          title: "Settings",
+          title: "Profile",
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="person-outline" size={size} color={color} />
           ),

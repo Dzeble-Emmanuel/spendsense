@@ -1,224 +1,417 @@
 import { useState } from "react";
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  Modal, TextInput, Alert,
+  View,
+  Text,
+  ScrollView,
+  StyleSheet,
+  TouchableOpacity,
+  Modal,
+  TextInput,
+  Alert,
 } from "react-native";
-import { useSubscriptions } from "../../src/hooks/useSubscriptions";
+import { Feather, Ionicons } from "@expo/vector-icons";
+import { router, useLocalSearchParams } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useFinance } from "../../src/hooks/useFinance";
 import { useTheme } from "../../src/hooks/useTheme";
-import {
-  Subscription, BILLING_CYCLES, SUBSCRIPTION_TEMPLATES,
-  daysUntilDue, getMonthlyEquivalent,
-} from "../../src/types/subscription";
+import { useSettings } from "../../src/hooks/useSettings";
+import { SUBSCRIPTION_TEMPLATES, Subscription } from "../../src/types/finance";
+import { useSubFeatureBack } from "../../src/hooks/useSubFeatureBack";
 
-type FormState = {
-  name: string;
-  amount: string;
-  billingCycle: Subscription["billingCycle"];
-  category: string;
-  icon: string;
-  color: string;
-  nextDueDate: string;
-  notes: string;
-};
-
-const DEFAULT_FORM: FormState = {
-  name: "", amount: "", billingCycle: "monthly",
-  category: "Entertainment", icon: "📦", color: "#6B7280",
-  nextDueDate: new Date().toISOString().split("T")[0], notes: "",
-};
-
-export default function Subscriptions() {
-  const { subscriptions, addSubscription, deleteSubscription, monthlyTotal, yearlyTotal, dueSoon } = useSubscriptions();
+export default function SubscriptionsScreen() {
+  const {
+    subscriptions,
+    addSubscription,
+    deleteSubscription,
+    toggleSubscriptionActive,
+  } = useFinance();
   const { theme } = useTheme();
+  const { formatMoney, currency } = useSettings();
+  const insets = useSafeAreaInsets();
+  const handleBack = useSubFeatureBack("/(tabs)/profile");
+
+  const topPadding = insets.top > 0 ? insets.top + 10 : 20;
+
   const [showModal, setShowModal] = useState(false);
-  const [form, setForm] = useState<FormState>(DEFAULT_FORM);
+  const [formName, setFormName] = useState("");
+  const [formAmount, setFormAmount] = useState("");
+  const [formCycle, setFormCycle] = useState<"weekly" | "monthly" | "yearly">("monthly");
+  const [formCategory, setFormCategory] = useState("Entertainment");
+  const [formColor, setFormColor] = useState("#2563EB");
+  const [formDueDate, setFormDueDate] = useState(
+    new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString().split("T")[0]
+  );
+  const [formNotes, setFormNotes] = useState("");
 
-  function selectTemplate(tpl: typeof SUBSCRIPTION_TEMPLATES[0]) {
-    setForm(f => ({ ...f, name: tpl.name, icon: tpl.icon, color: tpl.color, category: tpl.category }));
-  }
+  const activeSubs = subscriptions.filter((s) => s.isActive);
+  const monthlyTotal = activeSubs.reduce((sum, s) => {
+    if (s.billingCycle === "weekly") return sum + s.amount * 4.33;
+    if (s.billingCycle === "yearly") return sum + s.amount / 12;
+    return sum + s.amount;
+  }, 0);
 
-  function saveSubscription() {
-    if (!form.name || !form.amount) {
-      Alert.alert("Missing Info", "Please fill in the name and amount.");
+  const yearlyTotal = monthlyTotal * 12;
+
+  const dueSoon = activeSubs.filter((s) => {
+    const days = Math.ceil(
+      (new Date(s.nextDueDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+    );
+    return days >= 0 && days <= 5;
+  });
+
+  const getDueLabel = (nextDueDate: string) => {
+    const days = Math.ceil(
+      (new Date(nextDueDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+    );
+    if (days < 0) return { text: `Overdue ${Math.abs(days)}d`, color: "#F43F5E", bg: "rgba(244, 63, 94, 0.12)" };
+    if (days === 0) return { text: "Due today!", color: "#F43F5E", bg: "rgba(244, 63, 94, 0.12)" };
+    if (days <= 3) return { text: `Due in ${days}d`, color: "#F59E0B", bg: "rgba(245, 158, 11, 0.12)" };
+    return { text: `Due in ${days}d`, color: theme.textSecondary, bg: theme.subCard };
+  };
+
+  const selectTemplate = (tpl: (typeof SUBSCRIPTION_TEMPLATES)[0]) => {
+    setFormName(tpl.name);
+    setFormAmount(String(tpl.amount));
+    setFormColor(tpl.color);
+    setFormCategory(tpl.category);
+    setFormCycle(tpl.billingCycle);
+  };
+
+  const handleSave = () => {
+    if (!formName.trim() || !formAmount) {
+      Alert.alert("Missing Details", "Please provide a name and amount.");
       return;
     }
+    const val = parseFloat(formAmount);
+    if (isNaN(val) || val <= 0) {
+      Alert.alert("Invalid Amount", "Please enter a valid amount.");
+      return;
+    }
+
     addSubscription({
-      name: form.name,
-      amount: parseFloat(form.amount),
-      billingCycle: form.billingCycle,
-      category: form.category,
-      icon: form.icon,
-      color: form.color,
-      nextDueDate: form.nextDueDate,
-      notes: form.notes,
+      name: formName.trim(),
+      amount: val,
+      billingCycle: formCycle,
+      category: formCategory,
+      icon: formName.slice(0, 2).toUpperCase(),
+      color: formColor,
+      nextDueDate: formDueDate,
+      notes: formNotes.trim() || undefined,
       isActive: true,
       startedDate: new Date().toISOString().split("T")[0],
     });
+
     setShowModal(false);
-    setForm(DEFAULT_FORM);
-  }
+    setFormName("");
+    setFormAmount("");
+    setFormNotes("");
+  };
 
-  function confirmDelete(id: string, name: string) {
-    Alert.alert("Delete Subscription", `Remove "${name}"?`, [
+  const confirmDelete = (id: string, name: string) => {
+    Alert.alert("Remove Subscription", `Remove "${name}" from recurring list?`, [
       { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: () => deleteSubscription(id) },
+      {
+        text: "Remove",
+        style: "destructive",
+        onPress: () => deleteSubscription(id),
+      },
     ]);
-  }
-
-  function getDueLabel(sub: Subscription) {
-    const days = daysUntilDue(sub.nextDueDate);
-    if (days < 0) return { text: `Overdue by ${Math.abs(days)}d`, color: "#DC2626" };
-    if (days === 0) return { text: "Due today!", color: "#DC2626" };
-    if (days <= 3) return { text: `Due in ${days}d`, color: "#D97706" };
-    return { text: `Due in ${days}d`, color: "#64748B" };
-  }
+  };
 
   return (
     <ScrollView
-      style={[styles.container, { backgroundColor: theme.background }]}
-      contentContainerStyle={{ paddingBottom: 40 }}
+      style={{ flex: 1, backgroundColor: theme.background }}
+      showsVerticalScrollIndicator={false}
+      contentContainerStyle={{
+        paddingTop: topPadding,
+        paddingBottom: 50,
+        paddingHorizontal: 18,
+      }}
     >
-      <Text style={[styles.title, { color: theme.text }]}>Subscriptions</Text>
-      <Text style={[styles.subtitle, { color: theme.textSecondary }]}>Track your recurring payments</Text>
-
-      {/* Due soon alert */}
-      {dueSoon.length > 0 && (
-        <View style={styles.alertCard}>
-          <Text style={styles.alertText}>
-            ⚠️ {dueSoon.length} subscription{dueSoon.length > 1 ? "s" : ""} due soon:{" "}
-            {dueSoon.map(s => s.name).join(", ")}
+      {/* Title */}
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.backBtn} onPress={handleBack}>
+          <Feather name="arrow-left" size={18} color={theme.text} />
+          <Text style={[styles.backText, { color: theme.textSecondary }]}>Back</Text>
+        </TouchableOpacity>
+        <View style={{ flex: 1, marginLeft: 10 }}>
+          <Text style={[styles.title, { color: theme.text }]}>Subscriptions & Bills</Text>
+          <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
+            Monitor renewals & projected monthly obligations
           </Text>
+        </View>
+
+        <TouchableOpacity
+          style={[styles.addBtn, { backgroundColor: theme.primary }]}
+          onPress={() => setShowModal(true)}
+          activeOpacity={0.8}
+        >
+          <Feather name="plus" size={16} color="#FFFFFF" />
+          <Text style={styles.addBtnText}>Add</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Due Soon Warning */}
+      {dueSoon.length > 0 && (
+        <View style={styles.dueSoonCard}>
+          <Feather name="alert-triangle" size={16} color="#F59E0B" />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.dueSoonTitle}>
+              {dueSoon.length} Renewal{dueSoon.length > 1 ? "s" : ""} Approaching
+            </Text>
+            <Text style={styles.dueSoonSub}>
+              {dueSoon.map((s) => `${s.name} (${formatMoney(s.amount)})`).join(" • ")}
+            </Text>
+          </View>
         </View>
       )}
 
-      {/* Summary */}
-      <View style={styles.summaryRow}>
-        <View style={[styles.summaryCard, { backgroundColor: "#1E293B" }]}>
-          <Text style={styles.summaryLabel}>Monthly</Text>
-          <Text style={styles.summaryValue}>GH₵ {monthlyTotal.toFixed(2)}</Text>
+      {/* Summary Metrics */}
+      <View style={styles.summaryGrid}>
+        <View style={[styles.summaryCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.summaryLabel, { color: theme.textSecondary }]}>
+              MONTHLY OBLIGATION
+            </Text>
+            <Text style={[styles.summaryValue, { color: theme.text }]}>
+              {formatMoney(monthlyTotal)}
+            </Text>
+            <Text style={[styles.summarySub, { color: theme.textMuted }]}>
+              {activeSubs.length} active recurring
+            </Text>
+          </View>
+          <View style={[styles.summaryIconBg, { backgroundColor: theme.primaryLight }]}>
+            <Feather name="repeat" size={18} color={theme.primary} />
+          </View>
         </View>
-        <View style={[styles.summaryCard, { backgroundColor: "#1E293B" }]}>
-          <Text style={styles.summaryLabel}>Yearly</Text>
-          <Text style={styles.summaryValue}>GH₵ {yearlyTotal.toFixed(2)}</Text>
+
+        <View style={[styles.summaryCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.summaryLabel, { color: theme.textSecondary }]}>
+              ANNUALIZED TOTAL
+            </Text>
+            <Text style={[styles.summaryValue, { color: theme.accent }]}>
+              {formatMoney(yearlyTotal)}
+            </Text>
+            <Text style={[styles.summarySub, { color: theme.textMuted }]}>
+              12-month projection
+            </Text>
+          </View>
+          <View style={[styles.summaryIconBg, { backgroundColor: theme.accentLight }]}>
+            <Feather name="credit-card" size={18} color={theme.accent} />
+          </View>
         </View>
       </View>
 
-      {/* Add Button */}
-      <TouchableOpacity style={styles.addButton} onPress={() => setShowModal(true)}>
-        <Text style={styles.addButtonText}>+ Add Subscription</Text>
-      </TouchableOpacity>
+      {/* Subscriptions List */}
+      <Text style={[styles.sectionTitle, { color: theme.text }]}>Active Subscriptions</Text>
 
-      {/* Subscription List */}
       {subscriptions.length === 0 ? (
-        <View style={[styles.emptyCard, { backgroundColor: theme.card }]}>
-          <Text style={styles.emptyIcon}>📋</Text>
-          <Text style={[styles.emptyText, { color: theme.textSecondary }]}>No subscriptions yet</Text>
-          <Text style={[styles.emptyHint, { color: theme.textSecondary }]}>Track Netflix, Spotify, MTN bundles & more</Text>
+        <View style={[styles.emptyBox, { backgroundColor: theme.card, borderColor: theme.border }]}>
+          <Feather name="repeat" size={36} color={theme.textMuted} />
+          <Text style={[styles.emptyTitle, { color: theme.text }]}>No subscriptions tracked yet</Text>
+          <Text style={[styles.emptySub, { color: theme.textSecondary }]}>
+            Add recurring subscriptions like Netflix, Spotify, or MTN to track cycles.
+          </Text>
         </View>
       ) : (
         subscriptions.map((sub) => {
-          const dueInfo = getDueLabel(sub);
-          const monthly = getMonthlyEquivalent(sub.amount, sub.billingCycle);
+          const due = getDueLabel(sub.nextDueDate);
+          const monthlyEquiv =
+            sub.billingCycle === "yearly"
+              ? sub.amount / 12
+              : sub.billingCycle === "weekly"
+              ? sub.amount * 4.33
+              : sub.amount;
+          const initials = sub.name.slice(0, 2).toUpperCase();
+
           return (
-            <TouchableOpacity
+            <View
               key={sub.id}
-              style={[styles.subCard, { backgroundColor: theme.card }]}
-              onLongPress={() => confirmDelete(sub.id, sub.name)}
-              activeOpacity={0.8}
+              style={[
+                styles.subItemCard,
+                {
+                  backgroundColor: theme.card,
+                  borderColor: theme.border,
+                  opacity: sub.isActive ? 1 : 0.65,
+                },
+              ]}
             >
-              <View style={[styles.subIconBg, { backgroundColor: sub.color + "20" }]}>
-                <Text style={styles.subIcon}>{sub.icon}</Text>
+              <View style={styles.subItemLeft}>
+                <View
+                  style={[
+                    styles.subMonogram,
+                    { backgroundColor: `${sub.color || "#2563EB"}20`, borderColor: `${sub.color || "#2563EB"}50` },
+                  ]}
+                >
+                  <Text style={[styles.subMonogramText, { color: sub.color || theme.primary }]}>
+                    {initials}
+                  </Text>
+                </View>
+
+                <View style={{ flex: 1 }}>
+                  <View style={styles.subTitleRow}>
+                    <Text style={[styles.subTitle, { color: theme.text }]} numberOfLines={1}>
+                      {sub.name}
+                    </Text>
+                    <View style={[styles.dueBadge, { backgroundColor: due.bg }]}>
+                      <Text style={[styles.dueBadgeText, { color: due.color }]}>{due.text}</Text>
+                    </View>
+                  </View>
+
+                  <Text style={[styles.subDetails, { color: theme.textSecondary }]}>
+                    {sub.billingCycle.toUpperCase()} • {sub.category} • Renews {sub.nextDueDate}
+                  </Text>
+                </View>
               </View>
-              <View style={styles.subInfo}>
-                <Text style={[styles.subName, { color: theme.text }]}>{sub.name}</Text>
-                <Text style={[styles.subMeta, { color: theme.textSecondary }]}>
-                  {sub.billingCycle.charAt(0).toUpperCase() + sub.billingCycle.slice(1)} • {sub.category}
-                </Text>
-                <Text style={[styles.subDue, { color: dueInfo.color }]}>{dueInfo.text}</Text>
+
+              <View style={styles.subItemRight}>
+                <View style={{ alignItems: "flex-end" }}>
+                  <Text style={[styles.subAmount, { color: theme.text }]}>
+                    {formatMoney(sub.amount)}
+                  </Text>
+                  <Text style={[styles.subMonthlyEquiv, { color: theme.textMuted }]}>
+                    ~{formatMoney(monthlyEquiv)}/mo
+                  </Text>
+                </View>
+
+                <View style={styles.subActions}>
+                  <TouchableOpacity
+                    style={[
+                      styles.statusPill,
+                      sub.isActive
+                        ? { backgroundColor: "rgba(16, 185, 129, 0.12)", borderColor: "#10B981" }
+                        : { backgroundColor: theme.subCard, borderColor: theme.border },
+                    ]}
+                    onPress={() => toggleSubscriptionActive(sub.id)}
+                  >
+                    <Text
+                      style={[
+                        styles.statusPillText,
+                        { color: sub.isActive ? "#10B981" : theme.textMuted },
+                      ]}
+                    >
+                      {sub.isActive ? "Active" : "Paused"}
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.deleteBtn}
+                    onPress={() => confirmDelete(sub.id, sub.name)}
+                  >
+                    <Feather name="trash-2" size={15} color="#F43F5E" />
+                  </TouchableOpacity>
+                </View>
               </View>
-              <View style={styles.subRight}>
-                <Text style={[styles.subAmount, { color: theme.text }]}>GH₵ {sub.amount.toFixed(2)}</Text>
-                <Text style={[styles.subMonthly, { color: theme.textSecondary }]}>
-                  GH₵ {monthly.toFixed(2)}/mo
-                </Text>
-              </View>
-            </TouchableOpacity>
+            </View>
           );
         })
       )}
 
-      {/* Add Modal */}
+      {/* Add Subscription Modal */}
       <Modal visible={showModal} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
-          <View style={[styles.modal, { backgroundColor: theme.card }]}>
-            <ScrollView showsVerticalScrollIndicator={false}>
-              <Text style={[styles.modalTitle, { color: theme.text }]}>Add Subscription</Text>
+          <View style={[styles.modalBox, { backgroundColor: theme.card, borderColor: theme.border }]}>
+            <View style={styles.modalTop}>
+              <Text style={[styles.modalHeading, { color: theme.text }]}>Add Subscription</Text>
+              <TouchableOpacity onPress={() => setShowModal(false)}>
+                <Feather name="x" size={20} color={theme.textMuted} />
+              </TouchableOpacity>
+            </View>
 
-              {/* Templates */}
-              <Text style={[styles.label, { color: theme.textSecondary }]}>QUICK SELECT</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.templateScroll}>
-                {SUBSCRIPTION_TEMPLATES.map((tpl) => (
-                  <TouchableOpacity
-                    key={tpl.name}
-                    style={[styles.templateChip, { backgroundColor: form.icon === tpl.icon ? tpl.color + "30" : theme.background, borderColor: form.icon === tpl.icon ? tpl.color : theme.border }]}
-                    onPress={() => selectTemplate(tpl)}
-                  >
-                    <Text>{tpl.icon}</Text>
-                    <Text style={[styles.templateName, { color: theme.text }]}>{tpl.name}</Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-
-              <Text style={[styles.label, { color: theme.textSecondary }]}>NAME</Text>
-              <TextInput
-                style={[styles.input, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
-                value={form.name}
-                onChangeText={(v) => setForm(f => ({ ...f, name: v }))}
-                placeholder="e.g. Netflix"
-                placeholderTextColor={theme.textSecondary}
-              />
-
-              <Text style={[styles.label, { color: theme.textSecondary }]}>AMOUNT (GH₵)</Text>
-              <TextInput
-                style={[styles.input, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
-                value={form.amount}
-                onChangeText={(v) => setForm(f => ({ ...f, amount: v }))}
-                keyboardType="decimal-pad"
-                placeholder="0.00"
-                placeholderTextColor={theme.textSecondary}
-              />
-
-              <Text style={[styles.label, { color: theme.textSecondary }]}>BILLING CYCLE</Text>
-              <View style={styles.cycleRow}>
-                {BILLING_CYCLES.map((c) => (
-                  <TouchableOpacity
-                    key={c.value}
-                    style={[styles.cycleChip, { backgroundColor: form.billingCycle === c.value ? "#2563EB" : theme.background, borderColor: form.billingCycle === c.value ? "#2563EB" : theme.border }]}
-                    onPress={() => setForm(f => ({ ...f, billingCycle: c.value }))}
-                  >
-                    <Text style={{ color: form.billingCycle === c.value ? "#fff" : theme.text, fontSize: 12, fontWeight: "600" }}>{c.label}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-
-              <Text style={[styles.label, { color: theme.textSecondary }]}>NEXT DUE DATE</Text>
-              <TextInput
-                style={[styles.input, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
-                value={form.nextDueDate}
-                onChangeText={(v) => setForm(f => ({ ...f, nextDueDate: v }))}
-                placeholder="YYYY-MM-DD"
-                placeholderTextColor={theme.textSecondary}
-              />
-
-              <View style={styles.modalButtons}>
-                <TouchableOpacity style={[styles.cancelBtn, { borderColor: theme.border }]} onPress={() => setShowModal(false)}>
-                  <Text style={[styles.cancelBtnText, { color: theme.textSecondary }]}>Cancel</Text>
+            {/* Presets */}
+            <Text style={[styles.modalLabel, { color: theme.textSecondary }]}>POPULAR SERVICES</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
+              {SUBSCRIPTION_TEMPLATES.map((tpl) => (
+                <TouchableOpacity
+                  key={tpl.name}
+                  style={[styles.presetChip, { backgroundColor: theme.background, borderColor: theme.border }]}
+                  onPress={() => selectTemplate(tpl)}
+                >
+                  <View style={[styles.presetMonogram, { backgroundColor: `${tpl.color}25` }]}>
+                    <Text style={[styles.presetMonogramText, { color: tpl.color }]}>
+                      {tpl.name.slice(0, 2).toUpperCase()}
+                    </Text>
+                  </View>
+                  <Text style={[styles.presetName, { color: theme.text }]} numberOfLines={1}>
+                    {tpl.name}
+                  </Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.saveBtn} onPress={saveSubscription}>
-                  <Text style={styles.saveBtnText}>Save</Text>
-                </TouchableOpacity>
-              </View>
+              ))}
             </ScrollView>
+
+            <Text style={[styles.modalLabel, { color: theme.textSecondary }]}>SERVICE NAME</Text>
+            <TextInput
+              style={[styles.modalInput, { backgroundColor: theme.background, borderColor: theme.border, color: theme.text }]}
+              placeholder="e.g., Netflix, Spotify, MTN Fiber"
+              placeholderTextColor={theme.textMuted}
+              value={formName}
+              onChangeText={setFormName}
+            />
+
+            <View style={styles.inputSplitRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.modalLabel, { color: theme.textSecondary }]}>AMOUNT ({currency.code})</Text>
+                <TextInput
+                  style={[styles.modalInput, { backgroundColor: theme.background, borderColor: theme.border, color: theme.text }]}
+                  placeholder="0.00"
+                  placeholderTextColor={theme.textMuted}
+                  keyboardType="decimal-pad"
+                  value={formAmount}
+                  onChangeText={setFormAmount}
+                />
+              </View>
+
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.modalLabel, { color: theme.textSecondary }]}>BILLING CYCLE</Text>
+                <View style={styles.cycleBtnRow}>
+                  {(["monthly", "yearly", "weekly"] as const).map((c) => (
+                    <TouchableOpacity
+                      key={c}
+                      style={[
+                        styles.cycleBtn,
+                        formCycle === c
+                          ? { backgroundColor: theme.primary, borderColor: theme.primary }
+                          : { backgroundColor: theme.background, borderColor: theme.border },
+                      ]}
+                      onPress={() => setFormCycle(c)}
+                    >
+                      <Text
+                        style={[
+                          styles.cycleBtnText,
+                          { color: formCycle === c ? "#FFFFFF" : theme.textSecondary },
+                        ]}
+                      >
+                        {c.slice(0, 2).toUpperCase()}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            </View>
+
+            <Text style={[styles.modalLabel, { color: theme.textSecondary }]}>NEXT RENEWAL DATE (YYYY-MM-DD)</Text>
+            <TextInput
+              style={[styles.modalInput, { backgroundColor: theme.background, borderColor: theme.border, color: theme.text }]}
+              value={formDueDate}
+              onChangeText={setFormDueDate}
+            />
+
+            <Text style={[styles.modalLabel, { color: theme.textSecondary }]}>NOTES (OPTIONAL)</Text>
+            <TextInput
+              style={[styles.modalInput, { backgroundColor: theme.background, borderColor: theme.border, color: theme.text }]}
+              placeholder="e.g. Shared with family"
+              placeholderTextColor={theme.textMuted}
+              value={formNotes}
+              onChangeText={setFormNotes}
+            />
+
+            <TouchableOpacity
+              style={[styles.modalSubmitBtn, { backgroundColor: theme.primary }]}
+              onPress={handleSave}
+            >
+              <Text style={styles.modalSubmitText}>Save Subscription</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -227,51 +420,193 @@ export default function Subscriptions() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20 },
-  title: { fontSize: 28, fontWeight: "800", marginTop: 16 },
-  subtitle: { fontSize: 14, marginTop: 4, marginBottom: 20 },
+  container: { flex: 1, paddingHorizontal: 18, paddingTop: 12 },
 
-  alertCard: { backgroundColor: "#78350F", padding: 14, borderRadius: 14, marginBottom: 16 },
-  alertText: { color: "#FDE68A", fontSize: 13 },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 14,
+  },
+  backBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingVertical: 6,
+    paddingRight: 6,
+  },
+  backText: {
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  title: { fontSize: 24, fontWeight: "900", letterSpacing: -0.3 },
+  subtitle: { fontSize: 12, marginTop: 2 },
+  addBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 14,
+  },
+  addBtnText: { color: "#FFFFFF", fontSize: 12, fontWeight: "800" },
 
-  summaryRow: { flexDirection: "row", gap: 12, marginBottom: 16 },
-  summaryCard: { flex: 1, padding: 16, borderRadius: 18, alignItems: "center" },
-  summaryLabel: { color: "#94A3B8", fontSize: 12, marginBottom: 4 },
-  summaryValue: { color: "#FFFFFF", fontSize: 20, fontWeight: "800" },
+  dueSoonCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    padding: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(245, 158, 11, 0.3)",
+    backgroundColor: "rgba(245, 158, 11, 0.08)",
+    marginBottom: 14,
+  },
+  dueSoonTitle: { fontSize: 12, fontWeight: "800", color: "#F59E0B" },
+  dueSoonSub: { fontSize: 11, color: "#D97706", marginTop: 1 },
 
-  addButton: { backgroundColor: "#2563EB", padding: 16, borderRadius: 14, alignItems: "center", marginBottom: 20 },
-  addButtonText: { color: "#FFFFFF", fontWeight: "700", fontSize: 15 },
+  summaryGrid: { flexDirection: "row", gap: 10, marginBottom: 14 },
+  summaryCard: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 14,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  summaryLabel: { fontSize: 9, fontWeight: "800", letterSpacing: 0.5 },
+  summaryValue: { fontSize: 16, fontWeight: "900", marginTop: 3 },
+  summarySub: { fontSize: 10, marginTop: 2 },
+  summaryIconBg: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    justifyContent: "center",
+    alignItems: "center",
+    marginLeft: 6,
+  },
 
-  emptyCard: { padding: 40, borderRadius: 20, alignItems: "center" },
-  emptyIcon: { fontSize: 40, marginBottom: 12 },
-  emptyText: { fontSize: 16, fontWeight: "600" },
-  emptyHint: { fontSize: 13, marginTop: 6, textAlign: "center" },
+  sectionTitle: { fontSize: 15, fontWeight: "800", marginBottom: 10 },
 
-  subCard: { flexDirection: "row", padding: 16, borderRadius: 16, marginBottom: 8, alignItems: "center" },
-  subIconBg: { width: 48, height: 48, borderRadius: 16, justifyContent: "center", alignItems: "center", marginRight: 12 },
-  subIcon: { fontSize: 22 },
-  subInfo: { flex: 1 },
-  subName: { fontSize: 15, fontWeight: "700" },
-  subMeta: { fontSize: 12, marginTop: 2 },
-  subDue: { fontSize: 12, fontWeight: "600", marginTop: 4 },
-  subRight: { alignItems: "flex-end" },
-  subAmount: { fontSize: 15, fontWeight: "700" },
-  subMonthly: { fontSize: 11, marginTop: 2 },
+  emptyBox: {
+    padding: 36,
+    borderRadius: 24,
+    borderWidth: 1,
+    alignItems: "center",
+    gap: 8,
+  },
+  emptyTitle: { fontSize: 14, fontWeight: "800" },
+  emptySub: { fontSize: 12, textAlign: "center", lineHeight: 18 },
+
+  subItemCard: {
+    padding: 14,
+    borderRadius: 18,
+    borderWidth: 1,
+    marginBottom: 8,
+    gap: 10,
+  },
+  subItemLeft: { flexDirection: "row", alignItems: "center", gap: 12 },
+  subMonogram: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    borderWidth: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  subMonogramText: { fontSize: 13, fontWeight: "900" },
+  subTitleRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  subTitle: { fontSize: 14, fontWeight: "800", flexShrink: 1 },
+  dueBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
+  dueBadgeText: { fontSize: 9, fontWeight: "800" },
+  subDetails: { fontSize: 11, marginTop: 2 },
+
+  subItemRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderTopWidth: 1,
+    borderTopColor: "rgba(100, 116, 139, 0.15)",
+    paddingTop: 8,
+  },
+  subAmount: { fontSize: 14, fontWeight: "900" },
+  subMonthlyEquiv: { fontSize: 10, marginTop: 1 },
+  subActions: { flexDirection: "row", alignItems: "center", gap: 8 },
+  statusPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  statusPillText: { fontSize: 10, fontWeight: "800" },
+  deleteBtn: { padding: 6 },
 
   // Modal
-  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.7)", justifyContent: "flex-end" },
-  modal: { borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24, maxHeight: "90%" },
-  modalTitle: { fontSize: 20, fontWeight: "800", marginBottom: 20 },
-  label: { fontSize: 11, fontWeight: "700", letterSpacing: 1, marginBottom: 8, marginTop: 12 },
-  input: { height: 48, borderRadius: 12, paddingHorizontal: 14, fontSize: 15, borderWidth: 1, marginBottom: 4 },
-  templateScroll: { marginBottom: 8 },
-  templateChip: { flexDirection: "column", alignItems: "center", padding: 10, borderRadius: 14, marginRight: 8, borderWidth: 1.5, minWidth: 64 },
-  templateName: { fontSize: 10, fontWeight: "600", marginTop: 4, textAlign: "center" },
-  cycleRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  cycleChip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, borderWidth: 1.5 },
-  modalButtons: { flexDirection: "row", gap: 12, marginTop: 24 },
-  cancelBtn: { flex: 1, height: 48, borderRadius: 12, borderWidth: 1, justifyContent: "center", alignItems: "center" },
-  cancelBtnText: { fontWeight: "600" },
-  saveBtn: { flex: 2, height: 48, borderRadius: 12, backgroundColor: "#2563EB", justifyContent: "center", alignItems: "center" },
-  saveBtnText: { color: "#fff", fontWeight: "700", fontSize: 15 },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    justifyContent: "center",
+    padding: 20,
+  },
+  modalBox: {
+    borderRadius: 24,
+    borderWidth: 1,
+    padding: 20,
+    maxHeight: "90%",
+  },
+  modalTop: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 14,
+  },
+  modalHeading: { fontSize: 16, fontWeight: "900" },
+  modalLabel: { fontSize: 10, fontWeight: "800", letterSpacing: 0.8, marginBottom: 5 },
+  presetChip: {
+    flexDirection: "column",
+    alignItems: "center",
+    gap: 4,
+    padding: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    minWidth: 64,
+    marginRight: 6,
+  },
+  presetMonogram: {
+    width: 26,
+    height: 26,
+    borderRadius: 6,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  presetMonogramText: { fontSize: 10, fontWeight: "900" },
+  presetName: { fontSize: 10, fontWeight: "700" },
+
+  modalInput: {
+    height: 42,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    fontSize: 13,
+    fontWeight: "700",
+    marginBottom: 10,
+  },
+  inputSplitRow: { flexDirection: "row", gap: 10 },
+  cycleBtnRow: { flexDirection: "row", gap: 4 },
+  cycleBtn: {
+    flex: 1,
+    height: 42,
+    borderRadius: 10,
+    borderWidth: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  cycleBtnText: { fontSize: 11, fontWeight: "800" },
+  modalSubmitBtn: {
+    paddingVertical: 14,
+    borderRadius: 14,
+    alignItems: "center",
+    marginTop: 10,
+  },
+  modalSubmitText: { color: "#FFFFFF", fontSize: 13, fontWeight: "800" },
 });

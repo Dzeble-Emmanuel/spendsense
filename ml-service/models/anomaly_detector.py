@@ -7,13 +7,18 @@ class AnomalyDetector:
         self.contamination = contamination
 
     def detect_anomalies(self, transactions_data: list) -> list:
-        if len(transactions_data) < 5:
+        if not transactions_data or len(transactions_data) < 5:
             return []
 
         df = pd.DataFrame(transactions_data)
         expenses_df = df[df["type"] == "expense"].copy()
 
         if len(expenses_df) < 5:
+            return []
+
+        # Guard against zero standard deviation when expenses are identical or flat
+        std_val = float(expenses_df["amount"].std())
+        if std_val == 0.0 or np.isnan(std_val):
             return []
 
         # Isolation Forest on amount

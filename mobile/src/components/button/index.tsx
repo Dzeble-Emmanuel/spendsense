@@ -18,6 +18,7 @@ interface PrimaryButtonProps extends TouchableOpacityProps {
   color?: string;
   style?: ViewStyle;
   textStyle?: TextStyle;
+  disabled?: boolean;
 }
 
 export function PrimaryButton({
@@ -65,6 +66,7 @@ interface SecondaryButtonProps extends TouchableOpacityProps {
   icon?: React.ReactNode;
   style?: ViewStyle;
   textStyle?: TextStyle;
+  disabled?: boolean;
 }
 
 export function SecondaryButton({

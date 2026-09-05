@@ -1,32 +1,39 @@
-import { useEffect } from "react";
-import { Redirect } from "expo-router";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useState } from "react";
+import React, { useEffect } from "react";
+import { View, ActivityIndicator } from "react-native";
+import { useRouter } from "expo-router";
+import { useAuth } from "../src/context/AuthContext";
+import { useTheme } from "../src/hooks/useTheme";
 
-export default function Index() {
-  const [target, setTarget] = useState<string | null>(null);
+export default function EntryGatekeeper() {
+  const { isAuthenticated, hasSeenTour, isLoading } = useAuth();
+  const { theme } = useTheme();
+  const router = useRouter();
 
   useEffect(() => {
-    async function checkState() {
-      const [token, biometric] = await Promise.all([
-        AsyncStorage.getItem("spendsense_token"),
-        AsyncStorage.getItem("biometricEnabled"),
-      ]);
+    if (isLoading) return;
 
-      if (token && biometric === "true") {
-        // Logged in + biometric on → show lock screen
-        setTarget("/lock");
-      } else if (token) {
-        // Logged in but no biometric → go straight to tabs
-        setTarget("/(tabs)");
-      } else {
-        // Not logged in → go to login
-        setTarget("/(auth)/login");
-      }
+    if (isAuthenticated) {
+      // 1. User is already authenticated -> Go directly to Dashboard tabs
+      router.replace("/(tabs)");
+    } else if (!hasSeenTour) {
+      // 2. First-time user -> Show Welcome Tour
+      router.replace("/(auth)/welcome");
+    } else {
+      // 3. Returning logged-out user -> Go to Sign In
+      router.replace("/(auth)/login");
     }
-    checkState();
-  }, []);
+  }, [isAuthenticated, hasSeenTour, isLoading]);
 
-  if (!target) return null; // splash
-  return <Redirect href={target as any} />;
+  return (
+    <View
+      style={{
+        flex: 1,
+        justifyContent: "center",
+        alignItems: "center",
+        backgroundColor: theme.background,
+      }}
+    >
+      <ActivityIndicator size="large" color="#2563EB" />
+    </View>
+  );
 }

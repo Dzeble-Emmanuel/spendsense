@@ -1,371 +1,842 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useEffect, createContext, useState, ReactNode, useCallback } from "react";
-import { Transaction, Budget } from "../types/finance";
+import { useEffect, createContext, useState, ReactNode, useCallback, useMemo, useContext } from "react";
+import { Transaction, Budget, Subscription, AnomalyItem } from "../types/finance";
 import api from "../services/api";
+import { useAuth } from "./AuthContext";
 
-// ─── Sample transactions (Ghanaian context) for first-time demo ───
+function getUserStorageKey(
+  type: "tx" | "budgets" | "subs",
+  user: { email?: string; id?: string } | null
+): string | null {
+  if (!user || !user.email) {
+    return null;
+  }
+  const isDemo = user.email.toLowerCase().trim() === "demo@spendsense.app";
+  if (isDemo) {
+    return `spendsense_demo_${type}`;
+  }
+  const safeId = (user.id || user.email).toLowerCase().replace(/[^a-z0-9]/g, "_");
+  return `spendsense_user_${safeId}_${type}`;
+}
 
-const sampleTransactions: Transaction[] = [
+function makeIsoDate(daysAgo: number, hours: number = 12, minutes: number = 0): string {
+  const d = new Date(Date.now() - daysAgo * 86400000);
+  d.setHours(hours, minutes, 0, 0);
+  return d.toISOString();
+}
+
+export const INITIAL_BUDGETS: Budget[] = [
+  { category: "Food & Dining", icon: "coffee", budget: 0 },
+  { category: "Transport", icon: "navigation", budget: 0 },
+  { category: "Shopping", icon: "shopping-bag", budget: 0 },
+  { category: "Bills & Utilities", icon: "zap", budget: 0 },
+  { category: "Entertainment", icon: "film", budget: 0 },
+  { category: "Health & Wellness", icon: "activity", budget: 0 },
+  { category: "Education", icon: "book", budget: 0 },
+  { category: "Other", icon: "package", budget: 0 },
+];
+
+export const DEMO_TRANSACTIONS: Transaction[] = [
+  // --- INFLOWS / INCOME ---
   {
-    id: "sample-1",
-    title: "Monthly Salary",
+    id: "tx-demo-1",
+    title: "Monthly Salary Deposit",
     amount: 4500,
     type: "income",
     category: "Salary",
-    description: "July salary from work",
-    date: "2026-07-01",
+    description: "Corporate direct payroll deposit",
+    date: makeIsoDate(2, 9, 30),
+    merchant: "Employer Direct",
   },
   {
-    id: "sample-2",
-    title: "Freelance Project",
-    amount: 800,
+    id: "tx-demo-2",
+    title: "Freelance UI & Web Project",
+    amount: 850,
     type: "income",
     category: "Freelance",
-    description: "Website design project",
-    date: "2026-07-10",
+    description: "Mobile app wireframing milestone payout",
+    date: makeIsoDate(5, 14, 0),
+    merchant: "Client Wire Transfer",
   },
+
+  // --- TECH JUNCTION (Habitual Micro-Spending Sink - High Leak Risk) ---
   {
-    id: "sample-3",
-    title: "Jollof & Chicken",
-    amount: 45,
+    id: "tx-demo-3",
+    title: "Papaye Fast Food Combo",
+    amount: 65,
     type: "expense",
-    category: "Food",
-    description: "Lunch at Papaye",
-    date: "2026-07-02",
+    category: "Food & Dining",
+    description: "Grilled chicken with fried rice & salad",
+    date: makeIsoDate(1, 13, 15), // Afternoon Peak (12:00 - 15:00)
+    merchant: "Papaye",
+    locationLabel: "Tech Junction",
   },
   {
-    id: "sample-4",
-    title: "Trotro to campus",
-    amount: 8,
-    type: "expense",
-    category: "Transport",
-    description: "Daily trotro fare",
-    date: "2026-07-02",
-  },
-  {
-    id: "sample-5",
-    title: "MTN Data Bundle",
-    amount: 55,
-    type: "expense",
-    category: "Bills",
-    description: "Monthly data subscription",
-    date: "2026-07-03",
-  },
-  {
-    id: "sample-6",
-    title: "Waakye & Egg",
-    amount: 30,
-    type: "expense",
-    category: "Food",
-    description: "Breakfast from waakye joint",
-    date: "2026-07-04",
-  },
-  {
-    id: "sample-7",
-    title: "Uber to Accra Mall",
+    id: "tx-demo-4",
+    title: "Tech Junction Street Food",
     amount: 35,
     type: "expense",
-    category: "Transport",
-    description: "Ride to shopping center",
-    date: "2026-07-05",
+    category: "Food & Dining",
+    description: "Evening fried yam & grilled sausage",
+    date: makeIsoDate(2, 18, 30), // Evening Commute (17:00 - 21:00)
+    merchant: "Street Vendor",
+    locationLabel: "Tech Junction",
   },
   {
-    id: "sample-8",
-    title: "New Shirt",
-    amount: 120,
+    id: "tx-demo-5",
+    title: "Fresh Fruit Juice & Pastries",
+    amount: 25,
     type: "expense",
-    category: "Shopping",
-    description: "Clothing purchase at mall",
-    date: "2026-07-05",
+    category: "Food & Dining",
+    description: "Pineapple-ginger blend & meat pie",
+    date: makeIsoDate(3, 12, 45), // Afternoon Peak (12:00 - 15:00)
+    merchant: "Tech Junction Juice Bar",
+    locationLabel: "Tech Junction",
   },
   {
-    id: "sample-9",
-    title: "ECG Bill",
-    amount: 180,
+    id: "tx-demo-6",
+    title: "TopUp Pharmacy & First Aid",
+    amount: 75,
     type: "expense",
-    category: "Bills",
-    description: "Monthly electricity bill",
-    date: "2026-07-06",
+    category: "Health & Wellness",
+    description: "Multivitamins and pain relief tablets",
+    date: makeIsoDate(5, 17, 10), // Evening Commute (17:00 - 21:00)
+    merchant: "TopUp Pharmacy",
+    locationLabel: "Tech Junction",
   },
   {
-    id: "sample-10",
-    title: "Banku & Tilapia",
-    amount: 60,
+    id: "tx-demo-7",
+    title: "Tech Junction Kiosk Snacks",
+    amount: 20,
     type: "expense",
-    category: "Food",
-    description: "Dinner at local spot",
-    date: "2026-07-07",
+    category: "Food & Dining",
+    description: "Spring rolls & cold malt drink",
+    date: makeIsoDate(6, 17, 45), // Evening Commute (17:00 - 21:00)
+    merchant: "Kiosk Kessben",
+    locationLabel: "Tech Junction",
   },
   {
-    id: "sample-11",
-    title: "Cinema Ticket",
-    amount: 50,
+    id: "tx-demo-8",
+    title: "Tech Junction Evening Bread & Eggs",
+    amount: 30,
     type: "expense",
-    category: "Entertainment",
-    description: "Movie at Silverbird",
-    date: "2026-07-08",
+    category: "Food & Dining",
+    description: "Fresh tea bread, butter & boiled eggs",
+    date: makeIsoDate(7, 19, 15), // Evening Commute (17:00 - 21:00)
+    merchant: "Tech Junction Bakery",
+    locationLabel: "Tech Junction",
   },
   {
-    id: "sample-12",
-    title: "Pharmacy",
-    amount: 85,
-    type: "expense",
-    category: "Health",
-    description: "Medication and vitamins",
-    date: "2026-07-09",
-  },
-  {
-    id: "sample-13",
-    title: "Textbook",
-    amount: 95,
-    type: "expense",
-    category: "Education",
-    description: "Computer Science textbook",
-    date: "2026-07-10",
-  },
-  {
-    id: "sample-14",
-    title: "MoMo Transfer",
+    id: "tx-demo-9",
+    title: "Mobile Money Family Support Transfer",
     amount: 200,
     type: "expense",
     category: "Other",
-    description: "Sent to family",
-    date: "2026-07-12",
+    description: "Monthly upkeep allowance support",
+    date: makeIsoDate(9, 12, 10), // Afternoon Peak (12:00 - 15:00)
+    merchant: "MTN MoMo Agent",
+    locationLabel: "Tech Junction",
   },
+
+  // --- AYIGYA COMMUTE (Morning & Evening Commute Outflows) ---
   {
-    id: "sample-15",
-    title: "Fufu & Light Soup",
-    amount: 40,
-    type: "expense",
-    category: "Food",
-    description: "Weekend lunch",
-    date: "2026-07-13",
-  },
-  // --- June data (older month for trend analysis) ---
-  {
-    id: "sample-16",
-    title: "June Salary",
-    amount: 4500,
-    type: "income",
-    category: "Salary",
-    description: "June salary from work",
-    date: "2026-06-01",
-  },
-  {
-    id: "sample-17",
-    title: "Food expenses",
-    amount: 380,
-    type: "expense",
-    category: "Food",
-    description: "June food total",
-    date: "2026-06-15",
-  },
-  {
-    id: "sample-18",
-    title: "Transport June",
-    amount: 150,
+    id: "tx-demo-10",
+    title: "Bolt Ride to Work",
+    amount: 32,
     type: "expense",
     category: "Transport",
-    description: "June transport total",
-    date: "2026-06-15",
+    description: "Morning rush hour commute to Tech Junction",
+    date: makeIsoDate(1, 8, 15), // Morning Rush (07:00 - 10:00)
+    merchant: "Bolt",
+    locationLabel: "Ayigya Commute",
   },
   {
-    id: "sample-19",
-    title: "Bills June",
-    amount: 250,
+    id: "tx-demo-11",
+    title: "Trotro Commute to Adum",
+    amount: 15,
     type: "expense",
-    category: "Bills",
-    description: "June bills total",
-    date: "2026-06-15",
+    category: "Transport",
+    description: "Ayigya to Adum central commercial ride",
+    date: makeIsoDate(3, 8, 30), // Morning Rush (07:00 - 10:00)
+    merchant: "GPRTU Trotro",
+    locationLabel: "Ayigya Commute",
   },
   {
-    id: "sample-20",
-    title: "Shopping June",
-    amount: 200,
+    id: "tx-demo-12",
+    title: "Bolt Ride from Campus to Ayigya",
+    amount: 28,
+    type: "expense",
+    category: "Transport",
+    description: "Late evening commute from campus gate",
+    date: makeIsoDate(7, 18, 45), // Evening Commute (17:00 - 21:00)
+    merchant: "Bolt",
+    locationLabel: "Ayigya Commute",
+  },
+
+  // --- KNUST CAMPUS (Academic & Campus Outflows) ---
+  {
+    id: "tx-demo-13",
+    title: "Campus Academic Thesis Printing",
+    amount: 35,
+    type: "expense",
+    category: "Education",
+    description: "Final year project draft & spiral binding",
+    date: makeIsoDate(2, 11, 20), // Mid-Day (10:00 - 12:00)
+    merchant: "KNUST Commercial Center",
+    locationLabel: "KNUST Campus",
+  },
+  {
+    id: "tx-demo-14",
+    title: "KNUST Commercial Center Lunch",
+    amount: 45,
+    type: "expense",
+    category: "Food & Dining",
+    description: "Jollof rice combo with beef & plantain",
+    date: makeIsoDate(4, 13, 0), // Afternoon Peak (12:00 - 15:00)
+    merchant: "Campus Canteen",
+    locationLabel: "KNUST Campus",
+  },
+  {
+    id: "tx-demo-15",
+    title: "KNUST Stationery & Photocopy",
+    amount: 25,
+    type: "expense",
+    category: "Education",
+    description: "Lecture slides, notebook & highlighters",
+    date: makeIsoDate(6, 14, 15), // Afternoon Peak (12:00 - 15:00)
+    merchant: "Faculty Bookshop",
+    locationLabel: "KNUST Campus",
+  },
+  {
+    id: "tx-demo-16",
+    title: "MTN 4G Campus Data Bundle",
+    amount: 90,
+    type: "expense",
+    category: "Bills & Utilities",
+    description: "50GB monthly student research data package",
+    date: makeIsoDate(12, 10, 0), // Mid-Day (10:00 - 12:00)
+    merchant: "MTN MoMo",
+    locationLabel: "KNUST Campus",
+  },
+
+  // --- KEJETIA MARKET (Bulk Grocery Shopping & Retail) ---
+  {
+    id: "tx-demo-17",
+    title: "Shoprite Supermarket Groceries",
+    amount: 240,
     type: "expense",
     category: "Shopping",
-    description: "June shopping total",
-    date: "2026-06-20",
-  },
-  // --- May data ---
-  {
-    id: "sample-21",
-    title: "May Salary",
-    amount: 4200,
-    type: "income",
-    category: "Salary",
-    description: "May salary",
-    date: "2026-05-01",
+    description: "Rice, cooking oil, canned goods & provisions",
+    date: makeIsoDate(4, 15, 30), // Afternoon Casual (15:00 - 17:00)
+    merchant: "Shoprite Kejetia",
+    locationLabel: "Kejetia Market",
   },
   {
-    id: "sample-22",
-    title: "Food May",
-    amount: 350,
+    id: "tx-demo-18",
+    title: "Melcom Household Essentials",
+    amount: 135,
     type: "expense",
-    category: "Food",
-    description: "May food total",
-    date: "2026-05-15",
+    category: "Shopping",
+    description: "Cleaning detergents, toiletries & storage tubs",
+    date: makeIsoDate(9, 16, 0), // Afternoon Casual (15:00 - 17:00)
+    merchant: "Melcom",
+    locationLabel: "Kejetia Market",
   },
   {
-    id: "sample-23",
-    title: "Transport May",
-    amount: 120,
+    id: "tx-demo-19",
+    title: "Silverbird Cinema Tickets & Popcorn",
+    amount: 60,
+    type: "expense",
+    category: "Entertainment",
+    description: "Weekend evening movie screening",
+    date: makeIsoDate(8, 20, 0), // Evening Commute (17:00 - 21:00)
+    merchant: "Silverbird Cinemas",
+    locationLabel: "Kejetia Market",
+  },
+
+  // --- ADUM BUSINESS DISTRICT (Commercial & Transport Hub) ---
+  {
+    id: "tx-demo-20",
+    title: "TotalEnergies Fuel Top-up",
+    amount: 180,
     type: "expense",
     category: "Transport",
-    description: "May transport total",
-    date: "2026-05-15",
+    description: "Commercial vehicle petrol recharge",
+    date: makeIsoDate(5, 17, 30), // Evening Commute (17:00 - 21:00)
+    merchant: "TotalEnergies Adum",
+    locationLabel: "Adum Business District",
   },
   {
-    id: "sample-24",
-    title: "Bills May",
-    amount: 220,
+    id: "tx-demo-21",
+    title: "Laptop Charger & Phone Cable",
+    amount: 65,
     type: "expense",
-    category: "Bills",
-    description: "May bills total",
-    date: "2026-05-15",
+    category: "Shopping",
+    description: "Braided Type-C fast charging cable",
+    date: makeIsoDate(11, 14, 0), // Afternoon Peak (12:00 - 15:00)
+    merchant: "Adum Electronics Hub",
+    locationLabel: "Adum Business District",
+  },
+  {
+    // Pattern Anomaly (> 1.8x Average Expense)
+    id: "tx-demo-22",
+    title: "Sudden Laptop RAM & SSD Upgrade",
+    amount: 520,
+    type: "expense",
+    category: "Shopping",
+    description: "Hardware replacement and thermal paste servicing",
+    date: makeIsoDate(10, 15, 0), // Afternoon Peak (12:00 - 15:00)
+    merchant: "Adum Tech Repair",
+    locationLabel: "Adum Business District",
+  },
+
+  // --- HOME / HOSTEL (Essential Baseline Utilities & Subscriptions) ---
+  {
+    id: "tx-demo-23",
+    title: "ECG Prepaid Power Recharge",
+    amount: 180,
+    type: "expense",
+    category: "Bills & Utilities",
+    description: "Monthly residential power token recharge",
+    date: makeIsoDate(3, 9, 0), // Morning Rush (07:00 - 10:00)
+    merchant: "ECG PowerApp",
+    locationLabel: "Home / Hostel",
+  },
+  {
+    id: "tx-demo-24",
+    title: "GWCL Domestic Water Bill",
+    amount: 65,
+    type: "expense",
+    category: "Bills & Utilities",
+    description: "Monthly residential water utility invoice",
+    date: makeIsoDate(6, 10, 30), // Mid-Day (10:00 - 12:00)
+    merchant: "GWCL Online",
+    locationLabel: "Home / Hostel",
+  },
+  {
+    id: "tx-demo-25",
+    title: "MTN Fiber Home Broadband",
+    amount: 250,
+    type: "expense",
+    category: "Bills & Utilities",
+    description: "Monthly high-speed fiber internet subscription",
+    date: makeIsoDate(15, 10, 0), // Mid-Day (10:00 - 12:00)
+    merchant: "MTN Broadband",
+    isSubscription: true,
+    locationLabel: "Home / Hostel",
+  },
+  {
+    id: "tx-demo-26",
+    title: "Netflix Standard Subscription",
+    amount: 45,
+    type: "expense",
+    category: "Entertainment",
+    description: "Monthly video streaming package",
+    date: makeIsoDate(14, 21, 0), // Night / Off-Hours (21:00 - 06:00)
+    merchant: "Netflix",
+    isSubscription: true,
+    locationLabel: "Home / Hostel",
+  },
+  {
+    id: "tx-demo-27",
+    title: "Spotify Premium Plan",
+    amount: 30,
+    type: "expense",
+    category: "Entertainment",
+    description: "Monthly music streaming individual renewal",
+    date: makeIsoDate(10, 20, 30), // Evening Commute (17:00 - 21:00)
+    merchant: "Spotify",
+    isSubscription: true,
+    locationLabel: "Home / Hostel",
+  },
+
+  // --- UNTAGGED EXPENSES (Directly activates the newly built post-save tagging workflow) ---
+  {
+    id: "tx-demo-28",
+    title: "Evening Street Waakye",
+    amount: 30,
+    type: "expense",
+    category: "Food & Dining",
+    description: "Waakye pack with egg, wele & spaghetti",
+    date: makeIsoDate(2, 18, 0),
+    merchant: "Street Food Vendor",
+  },
+  {
+    id: "tx-demo-29",
+    title: "Corner Provisions Store",
+    amount: 45,
+    type: "expense",
+    category: "Food & Dining",
+    description: "Mineral water pack and biscuit provisions",
+    date: makeIsoDate(4, 9, 30),
+    merchant: "Neighborhood Shop",
+  },
+  {
+    id: "tx-demo-30",
+    title: "MoMo Agent Cashout Fee",
+    amount: 15,
+    type: "expense",
+    category: "Other",
+    description: "Cash withdrawal service commission",
+    date: makeIsoDate(6, 13, 0),
+    merchant: "MoMo Agent",
   },
 ];
 
-const STORAGE_KEY = "spendsense_transactions";
+export const DEMO_SUBSCRIPTIONS: Subscription[] = [
+  {
+    id: "sub-demo-1",
+    name: "MTN Fiber Broadband",
+    amount: 250,
+    billingCycle: "monthly",
+    category: "Bills & Utilities",
+    icon: "wifi",
+    color: "#F59E0B",
+    nextDueDate: new Date(Date.now() + 3 * 86400000).toISOString().split("T")[0],
+    isActive: true,
+    startedDate: new Date(Date.now() - 120 * 86400000).toISOString().split("T")[0],
+  },
+  {
+    id: "sub-demo-2",
+    name: "Netflix Standard",
+    amount: 45,
+    billingCycle: "monthly",
+    category: "Entertainment",
+    icon: "film",
+    color: "#E11D48",
+    nextDueDate: new Date(Date.now() + 11 * 86400000).toISOString().split("T")[0],
+    isActive: true,
+    startedDate: new Date(Date.now() - 60 * 86400000).toISOString().split("T")[0],
+  },
+  {
+    id: "sub-demo-3",
+    name: "Spotify Premium",
+    amount: 30,
+    billingCycle: "monthly",
+    category: "Entertainment",
+    icon: "music",
+    color: "#10B981",
+    nextDueDate: new Date(Date.now() + 17 * 86400000).toISOString().split("T")[0],
+    isActive: true,
+    startedDate: new Date(Date.now() - 90 * 86400000).toISOString().split("T")[0],
+  },
+  {
+    id: "sub-demo-4",
+    name: "Apple iCloud Storage",
+    amount: 18,
+    billingCycle: "monthly",
+    category: "Bills & Utilities",
+    icon: "cloud",
+    color: "#3B82F6",
+    nextDueDate: new Date(Date.now() + 24 * 86400000).toISOString().split("T")[0],
+    isActive: true,
+    startedDate: new Date(Date.now() - 150 * 86400000).toISOString().split("T")[0],
+  },
+];
 
-// ─── Context Type ───
+export const DEMO_BUDGETS: Budget[] = [
+  { category: "Food & Dining", icon: "coffee", budget: 450 },
+  { category: "Transport", icon: "navigation", budget: 350 },
+  { category: "Shopping", icon: "shopping-bag", budget: 1100 },
+  { category: "Bills & Utilities", icon: "zap", budget: 750 },
+  { category: "Entertainment", icon: "film", budget: 200 },
+  { category: "Health & Wellness", icon: "activity", budget: 150 },
+  { category: "Education", icon: "book", budget: 150 },
+  { category: "Other", icon: "package", budget: 300 },
+];
 
 export type FinanceContextType = {
   transactions: Transaction[];
-  addTransaction: (transaction: Transaction) => void;
+  addTransaction: (transaction: Omit<Transaction, "id"> | Transaction) => void;
   deleteTransaction: (id: string) => void;
   updateTransaction: (transaction: Transaction) => void;
+
+  budgets: Budget[];
+  updateBudget: (category: string, newLimit: number) => void;
+
+  subscriptions: Subscription[];
+  addSubscription: (sub: Omit<Subscription, "id"> | Subscription) => void;
+  deleteSubscription: (id: string) => void;
+  toggleSubscriptionActive: (id: string) => void;
+
   income: number;
   expenses: number;
   balance: number;
   savings: number;
   savingsRate: number;
+  anomalies: AnomalyItem[];
+  healthScore: { score: number; status: string };
+
   isLoading: boolean;
   syncWithBackend: () => Promise<void>;
+  clearAllData: () => Promise<void>;
+  seedDemoData: () => Promise<void>;
 };
 
 export const FinanceContext = createContext<FinanceContextType | null>(null);
 
-// ─── Provider ───
-
 export function FinanceProvider({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [budgets, setBudgets] = useState<Budget[]>(INITIAL_BUDGETS);
+  const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoaded, setIsLoaded] = useState(false);
 
-  // Load transactions on mount
+  // Sync data whenever authenticated session changes
   useEffect(() => {
-    loadTransactions();
-  }, []);
+    loadAllData();
+  }, [user?.email, user?.id]);
 
-  // Persist to AsyncStorage whenever transactions change
+  // Persist transactions exclusively to the logged-in account
   useEffect(() => {
-    if (transactions.length > 0) {
-      AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(transactions));
+    if (!isLoaded || !user) return;
+    const key = getUserStorageKey("tx", user);
+    if (key) {
+      AsyncStorage.setItem(key, JSON.stringify(transactions)).catch(() => {});
     }
-  }, [transactions]);
+  }, [transactions, isLoaded, user]);
 
-  async function loadTransactions() {
+  // Persist budgets exclusively to the logged-in account
+  useEffect(() => {
+    if (!isLoaded || !user) return;
+    const key = getUserStorageKey("budgets", user);
+    if (key) {
+      AsyncStorage.setItem(key, JSON.stringify(budgets)).catch(() => {});
+    }
+  }, [budgets, isLoaded, user]);
+
+  // Persist subscriptions exclusively to the logged-in account
+  useEffect(() => {
+    if (!isLoaded || !user) return;
+    const key = getUserStorageKey("subs", user);
+    if (key) {
+      AsyncStorage.setItem(key, JSON.stringify(subscriptions)).catch(() => {});
+    }
+  }, [subscriptions, isLoaded, user]);
+
+  async function loadAllData() {
     setIsLoading(true);
+    setIsLoaded(false);
+
     try {
-      const token = await AsyncStorage.getItem("spendsense_token");
-      if (token) {
-        const response = await api.get("/transactions");
-        if (response.data) {
-          setTransactions(response.data);
-          setIsLoading(false);
-          return;
+      // 1. Purge legacy global un-isolated keys so old unlinked data never surfaces
+      await AsyncStorage.multiRemove([
+        "spendsense_transactions",
+        "spendsense_budgets",
+        "spendsense_subscriptions",
+      ]).catch(() => {});
+
+      // 2. Resolve active authenticated identity
+      let activeUser = user;
+      if (!activeUser?.email) {
+        const savedUserStr = await AsyncStorage.getItem("spendsense_user");
+        if (savedUserStr) {
+          try {
+            activeUser = JSON.parse(savedUserStr);
+          } catch {}
         }
       }
 
-      // Offline local storage
-      const saved = await AsyncStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        setTransactions(JSON.parse(saved));
-      } else {
+      // 3. If NO LOGIN exists, strictly keep the app 100% EMPTY (zero data in the app)
+      if (!activeUser || !activeUser.email) {
         setTransactions([]);
+        setBudgets(INITIAL_BUDGETS);
+        setSubscriptions([]);
+        setIsLoading(false);
+        setIsLoaded(true);
+        return;
+      }
+
+      const isDemo = activeUser.email.toLowerCase().trim() === "demo@spendsense.app";
+      const txKey = getUserStorageKey("tx", activeUser)!;
+      const budgetsKey = getUserStorageKey("budgets", activeUser)!;
+      const subsKey = getUserStorageKey("subs", activeUser)!;
+
+      if (isDemo) {
+        // DEMO LOGIN ONLY: Provide comprehensive dataset for FYP defense presentation
+        const savedTx = await AsyncStorage.getItem(txKey);
+        let parsedTx: Transaction[] = [];
+        try {
+          parsedTx = savedTx ? JSON.parse(savedTx) : [];
+        } catch {}
+
+        if (parsedTx.length > 0) {
+          setTransactions(parsedTx);
+        } else {
+          setTransactions(DEMO_TRANSACTIONS);
+          await AsyncStorage.setItem(txKey, JSON.stringify(DEMO_TRANSACTIONS));
+        }
+
+        const savedBudgets = await AsyncStorage.getItem(budgetsKey);
+        let parsedBudgets: Budget[] = [];
+        try {
+          parsedBudgets = savedBudgets ? JSON.parse(savedBudgets) : [];
+        } catch {}
+
+        if (parsedBudgets.length > 0) {
+          setBudgets(parsedBudgets);
+        } else {
+          setBudgets(DEMO_BUDGETS);
+          await AsyncStorage.setItem(budgetsKey, JSON.stringify(DEMO_BUDGETS));
+        }
+
+        const savedSubs = await AsyncStorage.getItem(subsKey);
+        let parsedSubs: Subscription[] = [];
+        try {
+          parsedSubs = savedSubs ? JSON.parse(savedSubs) : [];
+        } catch {}
+
+        if (parsedSubs.length > 0) {
+          setSubscriptions(parsedSubs);
+        } else {
+          setSubscriptions(DEMO_SUBSCRIPTIONS);
+          await AsyncStorage.setItem(subsKey, JSON.stringify(DEMO_SUBSCRIPTIONS));
+        }
+      } else {
+        // PERSONAL REGISTERED ACCOUNT: Strictly user-owned data only; starts clean
+        const savedTx = await AsyncStorage.getItem(txKey);
+        if (savedTx) {
+          try {
+            const parsed = JSON.parse(savedTx);
+            const userOnly = Array.isArray(parsed)
+              ? parsed.filter((t: Transaction) => !t.id?.startsWith("tx-demo-"))
+              : [];
+            setTransactions(userOnly);
+          } catch {
+            setTransactions([]);
+          }
+        } else {
+          setTransactions([]);
+        }
+
+        const savedBudgets = await AsyncStorage.getItem(budgetsKey);
+        if (savedBudgets) {
+          try {
+            const parsed = JSON.parse(savedBudgets);
+            setBudgets(Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_BUDGETS);
+          } catch {
+            setBudgets(INITIAL_BUDGETS);
+          }
+        } else {
+          setBudgets(INITIAL_BUDGETS);
+        }
+
+        const savedSubs = await AsyncStorage.getItem(subsKey);
+        if (savedSubs) {
+          try {
+            const parsed = JSON.parse(savedSubs);
+            const userOnly = Array.isArray(parsed)
+              ? parsed.filter((s: Subscription) => !s.id?.startsWith("sub-demo-"))
+              : [];
+            setSubscriptions(userOnly);
+          } catch {
+            setSubscriptions([]);
+          }
+        } else {
+          setSubscriptions([]);
+        }
       }
     } catch (error) {
-      console.error("Failed to load transactions:", error);
-      setTransactions([]);
+      console.error("Failed to load user-scoped finance storage:", error);
+    } finally {
+      setIsLoading(false);
+      setIsLoaded(true);
     }
-    setIsLoading(false);
   }
 
-  function addTransaction(transaction: Transaction) {
-    setTransactions((prev) => [transaction, ...prev]);
+  async function seedDemoData() {
+    setTransactions(DEMO_TRANSACTIONS);
+    setSubscriptions(DEMO_SUBSCRIPTIONS);
+    setBudgets(DEMO_BUDGETS);
 
-    // Try to sync with backend
+    const demoUser = { email: "demo@spendsense.app", id: "demo" };
+    const txKey = getUserStorageKey("tx", demoUser)!;
+    const budgetsKey = getUserStorageKey("budgets", demoUser)!;
+    const subsKey = getUserStorageKey("subs", demoUser)!;
+
+    await Promise.all([
+      AsyncStorage.setItem(txKey, JSON.stringify(DEMO_TRANSACTIONS)),
+      AsyncStorage.setItem(subsKey, JSON.stringify(DEMO_SUBSCRIPTIONS)),
+      AsyncStorage.setItem(budgetsKey, JSON.stringify(DEMO_BUDGETS)),
+    ]);
+  }
+
+  // Transaction mutations
+  function addTransaction(tx: Omit<Transaction, "id"> | Transaction) {
+    const newTx: Transaction = {
+      ...tx,
+      id: "id" in tx && tx.id ? tx.id : `tx-${Date.now()}`,
+      date: tx.date || new Date().toISOString(),
+    };
+    setTransactions((prev) => [newTx, ...prev]);
+
     (async () => {
       try {
         const token = await AsyncStorage.getItem("spendsense_token");
-        if (token) {
-          await api.post("/transactions", transaction);
+        if (token && token !== "local-token" && token !== "demo-token") {
+          await api.post("/transactions", {
+            title: newTx.title,
+            amount: newTx.amount,
+            type: newTx.type,
+            category: newTx.category,
+            description: newTx.description,
+            date: newTx.date,
+          });
         }
-      } catch {
-        // Offline — already saved locally
+      } catch (err) {
+        console.log("Could not sync transaction to cloud, stored locally:", err);
       }
     })();
   }
 
   function deleteTransaction(id: string) {
-    setTransactions((prev) => prev.filter((item) => item.id !== id));
-
+    setTransactions((prev) => prev.filter((t) => t.id !== id));
     (async () => {
       try {
         const token = await AsyncStorage.getItem("spendsense_token");
-        if (token) {
+        if (token && token !== "local-token" && token !== "demo-token") {
           await api.delete(`/transactions/${id}`);
         }
-      } catch {
-        // Offline
+      } catch (err) {
+        console.log("Cloud delete skipped:", err);
       }
     })();
   }
 
-  function updateTransaction(transaction: Transaction) {
+  function updateTransaction(updatedTx: Transaction) {
     setTransactions((prev) =>
-      prev.map((item) => (item.id === transaction.id ? transaction : item))
+      prev.map((t) => (t.id === updatedTx.id ? updatedTx : t))
     );
-
-    (async () => {
-      try {
-        const token = await AsyncStorage.getItem("spendsense_token");
-        if (token) {
-          await api.put(`/transactions/${transaction.id}`, transaction);
-        }
-      } catch {
-        // Offline
-      }
-    })();
   }
 
+  // Budget mutations
+  function updateBudget(category: string, newLimit: number) {
+    setBudgets((prev) =>
+      prev.map((b) =>
+        b.category.toLowerCase() === category.toLowerCase()
+          ? { ...b, budget: newLimit }
+          : b
+      )
+    );
+  }
+
+  // Subscription mutations
+  function addSubscription(sub: Omit<Subscription, "id"> | Subscription) {
+    const newSub: Subscription = {
+      ...sub,
+      id: "id" in sub && sub.id ? sub.id : `sub-${Date.now()}`,
+    };
+    setSubscriptions((prev) => [...prev, newSub]);
+  }
+
+  function deleteSubscription(id: string) {
+    setSubscriptions((prev) => prev.filter((s) => s.id !== id));
+  }
+
+  function toggleSubscriptionActive(id: string) {
+    setSubscriptions((prev) =>
+      prev.map((s) => (s.id === id ? { ...s, isActive: !s.isActive } : s))
+    );
+  }
+
+  // Cloud sync
   const syncWithBackend = useCallback(async () => {
     try {
       const token = await AsyncStorage.getItem("spendsense_token");
-      if (token) {
-        const response = await api.get("/transactions");
-        if (response.data && response.data.length > 0) {
-          setTransactions(response.data);
-        }
+      if (!token || token === "local-token" || token === "demo-token") return;
+
+      const res = await api.get("/transactions");
+      if (Array.isArray(res.data) && res.data.length > 0) {
+        setTransactions(res.data);
       }
-    } catch (error) {
-      console.log("Sync failed — using local data");
+    } catch (e) {
+      console.log("Sync skipped (offline or server error):", e);
     }
   }, []);
 
-  // ─── Computed values ───
+  // Erase all records (Ledger Reset action)
+  const clearAllData = async () => {
+    setTransactions([]);
+    setSubscriptions([]);
+    setBudgets(INITIAL_BUDGETS);
+    if (user) {
+      const txKey = getUserStorageKey("tx", user);
+      const budgetsKey = getUserStorageKey("budgets", user);
+      const subsKey = getUserStorageKey("subs", user);
+      const keysToRemove = [txKey, budgetsKey, subsKey].filter(Boolean) as string[];
+      if (keysToRemove.length > 0) {
+        await AsyncStorage.multiRemove(keysToRemove);
+      }
+    }
+  };
 
-  const income = transactions
-    .filter((t) => t.type === "income")
-    .reduce((sum, t) => sum + t.amount, 0);
+  // Calculations
+  const income = useMemo(() => {
+    return transactions
+      .filter((t) => t.type === "income")
+      .reduce((sum, t) => sum + t.amount, 0);
+  }, [transactions]);
 
-  const expenses = transactions
-    .filter((t) => t.type === "expense")
-    .reduce((sum, t) => sum + t.amount, 0);
+  const expenses = useMemo(() => {
+    return transactions
+      .filter((t) => t.type === "expense")
+      .reduce((sum, t) => sum + t.amount, 0);
+  }, [transactions]);
 
-  const balance = income - expenses;
-  const savings = income - expenses;
-  const savingsRate = income > 0 ? (savings / income) * 100 : 0;
+  const balance = useMemo(() => {
+    return income - expenses;
+  }, [income, expenses]);
+
+  const savings = useMemo(() => {
+    return balance > 0 ? balance : 0;
+  }, [balance]);
+
+  const savingsRate = useMemo(() => {
+    if (income <= 0) return 0;
+    return Math.max(0, Math.round(((income - expenses) / income) * 100));
+  }, [income, expenses]);
+
+  const healthScore = useMemo(() => {
+    if (income === 0 && expenses === 0) {
+      return { score: 70, status: "Ready for first transaction" };
+    }
+
+    let score = 50;
+    if (savingsRate > 40) score += 30;
+    else if (savingsRate > 20) score += 20;
+
+    if (expenses > income) score -= 30;
+    if (score > 100) score = 100;
+    if (score < 0) score = 0;
+
+    let status = "Excellent Health";
+    if (score < 50) status = "Needs Immediate Attention";
+    else if (score < 75) status = "Fair / Balanced";
+    else if (score < 90) status = "Good Financial Standing";
+
+    return { score, status };
+  }, [savingsRate, expenses, income]);
+
+  const anomalies = useMemo<AnomalyItem[]>(() => {
+    const expenseTxs = transactions.filter((t) => t.type === "expense");
+    if (expenseTxs.length === 0) return [];
+    const avgExpense =
+      expenseTxs.reduce((sum, t) => sum + t.amount, 0) / expenseTxs.length;
+
+    return expenseTxs
+      .filter((t) => t.amount > avgExpense * 1.8)
+      .map((t) => ({
+        id: t.id,
+        title: t.title,
+        amount: t.amount,
+        category: t.category,
+        reason: `Unusually large single expense (${Math.round(
+          (t.amount / Math.max(avgExpense, 1)) * 100 - 100
+        )}% above your average)`,
+        date: t.date,
+      }));
+  }, [transactions]);
 
   return (
     <FinanceContext.Provider
@@ -374,16 +845,34 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         addTransaction,
         deleteTransaction,
         updateTransaction,
+        budgets,
+        updateBudget,
+        subscriptions,
+        addSubscription,
+        deleteSubscription,
+        toggleSubscriptionActive,
         income,
         expenses,
         balance,
         savings,
         savingsRate,
+        anomalies,
+        healthScore,
         isLoading,
         syncWithBackend,
+        clearAllData,
+        seedDemoData,
       }}
     >
       {children}
     </FinanceContext.Provider>
   );
+}
+
+export function useFinance() {
+  const ctx = useContext(FinanceContext);
+  if (!ctx) {
+    throw new Error("useFinance must be used within a FinanceProvider");
+  }
+  return ctx;
 }

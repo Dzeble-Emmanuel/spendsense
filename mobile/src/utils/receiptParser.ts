@@ -9,6 +9,7 @@ export type ParsedReceiptData = {
   category: string;
   date: string;
   confidence: "high" | "medium" | "low";
+  locationLabel?: string;
 };
 
 // Known merchant → category mappings
@@ -78,15 +79,53 @@ function extractDate(text: string): string {
   return today;
 }
 
+function detectLocation(text: string): string | undefined {
+  const lower = text.toLowerCase();
+  // 1. Rent and Utilities rule: Home / Hostel
+  if (
+    lower.includes("rent") ||
+    lower.includes("ecg") ||
+    lower.includes("power") ||
+    lower.includes("electricity") ||
+    lower.includes("gwcl") ||
+    lower.includes("water bill") ||
+    lower.includes("hostel")
+  ) {
+    return "Home / Hostel";
+  }
+
+  // 2. Explicit location mentioned on the receipt
+  if (lower.includes("tech junction") || lower.includes("tech jct")) {
+    return "Tech Junction";
+  }
+  if (lower.includes("knust") || lower.includes("campus")) {
+    return "KNUST Campus";
+  }
+  if (lower.includes("kejetia")) {
+    return "Kejetia Market";
+  }
+  if (lower.includes("ayigya")) {
+    return "Ayigya Commute";
+  }
+  if (lower.includes("adum")) {
+    return "Adum Business District";
+  }
+
+  // 3. Do NOT determine on our own — allow user to input their location
+  return undefined;
+}
+
 export function parseReceiptText(text: string): ParsedReceiptData {
   const amount = extractAmount(text);
   const title = extractTitle(text);
   const category = detectCategory(text);
   const date = extractDate(text);
+  const locationLabel = detectLocation(text);
 
   const confidence =
     amount !== null && title !== "Receipt Expense" ? "high" :
     amount !== null ? "medium" : "low";
 
-  return { title, amount, category, date, confidence };
+  return { title, amount, category, date, confidence, locationLabel };
 }
+

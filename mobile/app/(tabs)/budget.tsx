@@ -1,185 +1,532 @@
-import React from "react";
+import { useState } from "react";
 import {
   View,
   Text,
-  StyleSheet,
   ScrollView,
+  StyleSheet,
+  TouchableOpacity,
+  Modal,
+  TextInput,
+  Alert,
 } from "react-native";
+import { Feather, Ionicons } from "@expo/vector-icons";
+import { router, useLocalSearchParams } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFinance } from "../../src/hooks/useFinance";
 import { useTheme } from "../../src/hooks/useTheme";
 import { useSettings } from "../../src/hooks/useSettings";
-import { CATEGORY_PRACTICAL_TIPS } from "../../src/ai/insights";
+import { CATEGORY_PRACTICAL_TIPS } from "../../src/types/finance";
+import { useSubFeatureBack } from "../../src/hooks/useSubFeatureBack";
 
-const COLORS = {
-  green: "#16A34A",
-  red: "#DC2626",
-  orange: "#F59E0B",
-};
-
-export default function Budget() {
-  const { transactions = [] } = useFinance();
+export default function BudgetScreen() {
+  const { budgets, updateBudget, transactions } = useFinance();
   const { theme } = useTheme();
-  const { formatMoney } = useSettings();
+  const { formatMoney, currency } = useSettings();
+  const insets = useSafeAreaInsets();
+  const handleBack = useSubFeatureBack("/(tabs)/profile");
 
-  const budgets = [
-    { category: "Food", icon: "🍔", budget: 500 },
-    { category: "Transport", icon: "🚕", budget: 300 },
-    { category: "Shopping", icon: "🛒", budget: 400 },
-    { category: "Bills", icon: "💡", budget: 600 },
-    { category: "Entertainment", icon: "🎮", budget: 250 },
-    { category: "Health", icon: "❤️", budget: 350 },
-    { category: "Education", icon: "📚", budget: 450 },
-    { category: "Other", icon: "📦", budget: 200 },
-  ];
+  const topPadding = insets.top > 0 ? insets.top + 10 : 20;
 
-  const totalBudget = budgets.reduce((sum, item) => sum + item.budget, 0);
+  const [modalCategory, setModalCategory] = useState<string | null>(null);
+  const [modalAmount, setModalAmount] = useState("");
+
+  const totalBudget = budgets.reduce((sum, b) => sum + b.budget, 0);
   const totalSpent = transactions
-    .filter((item) => item.type === "expense")
-    .reduce((sum, item) => sum + item.amount, 0);
-  const totalRemaining = totalBudget - totalSpent;
-  const overallPercentage = Math.min((totalSpent / totalBudget) * 100, 100);
+    .filter((t) => t.type === "expense")
+    .reduce((sum, t) => sum + t.amount, 0);
 
-  // Identify overspent or high-spending categories for targeted practical tips
+  const totalRemaining = totalBudget - totalSpent;
+  const overallPercentage = Math.min(
+    Math.round((totalSpent / Math.max(totalBudget, 1)) * 100),
+    100
+  );
+
   const overspentCategories = budgets.filter((item) => {
     const spent = transactions
-      .filter((t) => t.category === item.category && t.type === "expense")
+      .filter(
+        (t) =>
+          t.type === "expense" &&
+          (t.category.toLowerCase().includes(item.category.toLowerCase().split(" ")[0]) ||
+            item.category.toLowerCase().includes(t.category.toLowerCase().split(" ")[0]))
+      )
       .reduce((sum, t) => sum + t.amount, 0);
-    return spent > item.budget * 0.7; // > 70% of budget spent
+    return item.budget > 0 && spent > item.budget * 0.7;
   });
+
+  const openEditModal = (category: string, currentLimit: number) => {
+    setModalCategory(category);
+    setModalAmount(currentLimit > 0 ? String(currentLimit) : "");
+  };
+
+  const handleSaveModal = () => {
+    if (!modalCategory) return;
+    const val = parseFloat(modalAmount);
+    if (isNaN(val) || val < 0) {
+      Alert.alert("Invalid Input", "Please enter a valid positive number.");
+      return;
+    }
+    updateBudget(modalCategory, val);
+    setModalCategory(null);
+  };
 
   return (
     <ScrollView
-      style={[styles.container, { backgroundColor: theme.background }]}
-      contentContainerStyle={{ paddingBottom: 40 }}
+      style={{ flex: 1, backgroundColor: theme.background }}
       showsVerticalScrollIndicator={false}
+      contentContainerStyle={{
+        paddingTop: topPadding,
+        paddingBottom: 50,
+        paddingHorizontal: 18,
+      }}
     >
-      <Text style={[styles.title, { color: theme.text }]}>Budget Tracker</Text>
-      <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-        Track your monthly spending limits & AI advice
-      </Text>
+      {/* Title */}
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.backBtn} onPress={handleBack}>
+          <Feather name="arrow-left" size={18} color={theme.text} />
+          <Text style={[styles.backText, { color: theme.textSecondary }]}>Back</Text>
+        </TouchableOpacity>
+        <View style={{ flex: 1, marginLeft: 10 }}>
+          <Text style={[styles.title, { color: theme.text }]}>Monthly Budget</Text>
+          <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
+            Set spending thresholds & get proactive alerts
+          </Text>
+        </View>
+      </View>
 
-      {/* Summary */}
-      <View style={[styles.summaryCard, { backgroundColor: theme.card }]}>
-        <Text style={[styles.summaryTitle, { color: theme.text }]}>
-          Monthly Budget Overview
-        </Text>
-        <Text style={[styles.summaryText, { color: theme.text }]}>
-          Total Budget: {formatMoney(totalBudget)}
-        </Text>
-        <Text style={[styles.summaryText, { color: theme.text }]}>
-          Total Spent: {formatMoney(totalSpent)}
-        </Text>
-        <Text style={[styles.summaryText, { color: totalRemaining >= 0 ? COLORS.green : COLORS.red }]}>
-          Remaining: {formatMoney(totalRemaining)}
-        </Text>
+      {/* Monthly Limit Overview Card */}
+      <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]}>
+        <View style={styles.cardHeader}>
+          <View style={styles.cardHeaderLeft}>
+            <Feather name="pie-chart" size={15} color={theme.primary} />
+            <Text style={[styles.cardHeaderLabel, { color: theme.textSecondary }]}>
+              CYCLE HEALTH
+            </Text>
+          </View>
 
-        <View style={styles.progressBackground}>
           <View
             style={[
-              styles.progress,
+              styles.bufferPill,
+              totalRemaining >= 0
+                ? { backgroundColor: "rgba(16, 185, 129, 0.12)", borderColor: "#10B981" }
+                : { backgroundColor: "rgba(244, 63, 94, 0.12)", borderColor: "#F43F5E" },
+            ]}
+          >
+            <Feather
+              name={totalRemaining >= 0 ? "check-circle" : "alert-circle"}
+              size={12}
+              color={totalRemaining >= 0 ? "#10B981" : "#F43F5E"}
+            />
+            <Text
+              style={[
+                styles.bufferPillText,
+                { color: totalRemaining >= 0 ? "#10B981" : "#F43F5E" },
+              ]}
+            >
+              {totalRemaining >= 0
+                ? `${formatMoney(totalRemaining)} Safe Buffer`
+                : `Over by ${formatMoney(Math.abs(totalRemaining))}`}
+            </Text>
+          </View>
+        </View>
+
+        {/* 3 Metric Capsules */}
+        <View style={styles.metricGrid}>
+          <View style={[styles.metricBox, { backgroundColor: theme.background, borderColor: theme.border }]}>
+            <Text style={[styles.metricLabel, { color: theme.textSecondary }]}>TOTAL BUDGET</Text>
+            <Text style={[styles.metricValue, { color: theme.text }]}>
+              {formatMoney(totalBudget)}
+            </Text>
+          </View>
+
+          <View style={[styles.metricBox, { backgroundColor: theme.background, borderColor: theme.border }]}>
+            <Text style={[styles.metricLabel, { color: theme.textSecondary }]}>SPENT SO FAR</Text>
+            <Text style={[styles.metricValue, { color: "#F43F5E" }]}>
+              {formatMoney(totalSpent)}
+            </Text>
+          </View>
+
+          <View style={[styles.metricBox, { backgroundColor: theme.background, borderColor: theme.border }]}>
+            <Text style={[styles.metricLabel, { color: theme.textSecondary }]}>NET BUFFER</Text>
+            <Text
+              style={[
+                styles.metricValue,
+                { color: totalRemaining >= 0 ? "#10B981" : "#F43F5E" },
+              ]}
+            >
+              {formatMoney(totalRemaining)}
+            </Text>
+          </View>
+        </View>
+
+        {/* Progress Bar */}
+        <View style={styles.progressHeader}>
+          <Text style={[styles.progressLabel, { color: theme.textSecondary }]}>
+            Overall Budget Consumption
+          </Text>
+          <Text
+            style={[
+              styles.progressValue,
+              { color: overallPercentage >= 100 ? "#F43F5E" : theme.primary },
+            ]}
+          >
+            {overallPercentage}% used
+          </Text>
+        </View>
+
+        <View style={[styles.progressBarTrack, { backgroundColor: theme.subCard, borderColor: theme.border }]}>
+          <View
+            style={[
+              styles.progressBarFill,
               {
-                width: `${overallPercentage}%` as `${number}%`,
-                backgroundColor: overallPercentage >= 100 ? COLORS.red : COLORS.green,
+                width: `${overallPercentage}%`,
+                backgroundColor:
+                  overallPercentage >= 100
+                    ? "#F43F5E"
+                    : overallPercentage >= 70
+                    ? "#F59E0B"
+                    : "#10B981",
               },
             ]}
           />
         </View>
-
-        <Text style={[styles.remaining, { color: theme.textSecondary }]}>
-          {overallPercentage.toFixed(0)}% of monthly budget used
-        </Text>
       </View>
 
-      {/* Category Budgets */}
-      {budgets.map((item) => {
-        const spent = transactions
-          .filter((t) => t.category === item.category && t.type === "expense")
-          .reduce((sum, t) => sum + t.amount, 0);
+      {/* Category Limits & Allowances */}
+      <Text style={[styles.sectionTitle, { color: theme.text }]}>
+        Category Limits & Allowances
+      </Text>
 
-        const remaining = item.budget - spent;
-        const percentage = Math.min((spent / item.budget) * 100, 100);
-        const progressColor =
-          percentage >= 100 ? COLORS.red : percentage >= 70 ? COLORS.orange : COLORS.green;
+      <View style={styles.categoriesGrid}>
+        {budgets.map((item) => {
+          const spent = transactions
+            .filter(
+              (t) =>
+                t.type === "expense" &&
+                (t.category.toLowerCase().includes(item.category.toLowerCase().split(" ")[0]) ||
+                  item.category.toLowerCase().includes(t.category.toLowerCase().split(" ")[0]))
+            )
+            .reduce((sum, t) => sum + t.amount, 0);
 
-        return (
-          <View key={item.category} style={[styles.card, { backgroundColor: theme.card }]}>
-            <View style={styles.header}>
-              <Text style={[styles.category, { color: theme.text }]}>
-                {item.icon} {item.category}
-              </Text>
-              <Text style={{ color: theme.text }}>
-                {formatMoney(spent)} / {formatMoney(item.budget)}
-              </Text>
-            </View>
+          const hasLimit = item.budget > 0;
+          const remaining = item.budget - spent;
+          const percentage = hasLimit
+            ? Math.min(Math.round((spent / item.budget) * 100), 100)
+            : 0;
 
-            <View style={styles.progressBackground}>
-              <View
-                style={[
-                  styles.progress,
-                  { width: `${percentage}%` as `${number}%`, backgroundColor: progressColor },
-                ]}
-              />
-            </View>
+          const isOver = hasLimit && spent > item.budget;
+          const isWarning = hasLimit && !isOver && spent >= item.budget * 0.7;
 
-            <Text style={[styles.remaining, { color: theme.textSecondary }]}>
-              {percentage.toFixed(0)}% Used
-            </Text>
+          return (
+            <TouchableOpacity
+              key={item.category}
+              style={[styles.catCard, { backgroundColor: theme.card, borderColor: theme.border }]}
+              onPress={() => openEditModal(item.category, item.budget)}
+              activeOpacity={0.7}
+            >
+              <View style={styles.catCardHeader}>
+                <View style={styles.catLeft}>
+                  <View style={[styles.catDot, { backgroundColor: theme.primary }]} />
+                  <Text style={[styles.catName, { color: theme.text }]} numberOfLines={1}>
+                    {item.category}
+                  </Text>
+                </View>
 
-            <Text style={[styles.remaining, { color: remaining >= 0 ? COLORS.green : COLORS.red }]}>
-              {remaining >= 0
-                ? `${formatMoney(remaining)} remaining`
-                : `Over budget by ${formatMoney(Math.abs(remaining))}`}
-            </Text>
-          </View>
-        );
-      })}
-
-      {/* Actionable AI Advice Section */}
-      <View style={[styles.aiCard, { backgroundColor: "#0F172A", borderLeftWidth: 4, borderLeftColor: "#3B82F6" }]}>
-        <Text style={styles.aiTitle}>🤖 SpendSense AI Actionable Tips</Text>
-        {overspentCategories.length > 0 ? (
-          overspentCategories.map((item) => {
-            const tip = CATEGORY_PRACTICAL_TIPS[item.category] || CATEGORY_PRACTICAL_TIPS["Other"];
-            return (
-              <View key={item.category} style={styles.tipBox}>
-                <Text style={styles.tipHeader}>
-                  {tip.icon} High {item.category} Spending Detected
-                </Text>
-                <Text style={styles.tipText}>
-                  💡 {tip.actionableStep}
-                </Text>
+                <View style={styles.catRight}>
+                  <Text style={[styles.catAmountText, { color: theme.textSecondary }]}>
+                    {formatMoney(spent)} / {hasLimit ? formatMoney(item.budget) : "No limit"}
+                  </Text>
+                  <Feather name="edit-2" size={13} color={theme.textMuted} />
+                </View>
               </View>
-            );
-          })
-        ) : (
-          <Text style={styles.tipText}>
-            🎉 Great job! All category expenditures are within healthy limits. Keep up your disciplined spending habits!
-          </Text>
-        )}
+
+              {/* Progress Bar */}
+              <View style={[styles.catTrack, { backgroundColor: theme.subCard, borderColor: theme.border }]}>
+                <View
+                  style={[
+                    styles.catFill,
+                    {
+                      width: `${hasLimit ? percentage : 0}%`,
+                      backgroundColor: isOver
+                        ? "#F43F5E"
+                        : isWarning
+                        ? "#F59E0B"
+                        : "#10B981",
+                    },
+                  ]}
+                />
+              </View>
+
+              <View style={styles.catFooter}>
+                <Text style={[styles.catUtilized, { color: theme.textMuted }]}>
+                  {hasLimit ? `${percentage}% utilized` : "Tap to set budget"}
+                </Text>
+                {hasLimit && (
+                  <Text
+                    style={[
+                      styles.catRemaining,
+                      { color: remaining >= 0 ? "#10B981" : "#F43F5E" },
+                    ]}
+                  >
+                    {remaining >= 0
+                      ? `${formatMoney(remaining)} left`
+                      : `Over by ${formatMoney(Math.abs(remaining))}`}
+                  </Text>
+                )}
+              </View>
+            </TouchableOpacity>
+          );
+        })}
       </View>
+
+      {/* Practical Budget Guidance Section */}
+      <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border, marginTop: 14 }]}>
+        <View style={styles.guidanceHeader}>
+          <View style={[styles.guidanceIconBg, { backgroundColor: theme.accentLight }]}>
+            <Ionicons name="sparkles" size={15} color={theme.primary} />
+          </View>
+          <Text style={[styles.guidanceTitle, { color: theme.text }]}>
+            Practical Budget Guidance
+          </Text>
+        </View>
+
+        <View style={{ gap: 8, marginTop: 10 }}>
+          {overspentCategories.length > 0 ? (
+            overspentCategories.map((item) => {
+              const tip =
+                CATEGORY_PRACTICAL_TIPS[item.category] || CATEGORY_PRACTICAL_TIPS["Other"];
+              return (
+                <View
+                  key={item.category}
+                  style={[styles.tipRow, { backgroundColor: theme.background, borderColor: theme.border }]}
+                >
+                  <View style={styles.tipDot} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.tipTitle, { color: theme.primary }]}>
+                      High {item.category} Spending Observed
+                    </Text>
+                    <Text style={[styles.tipBody, { color: theme.textSecondary }]}>
+                      {tip.actionableStep}
+                    </Text>
+                  </View>
+                </View>
+              );
+            })
+          ) : (
+            <View style={styles.tipSafeRow}>
+              <Ionicons name="checkmark-circle" size={18} color="#10B981" />
+              <Text style={styles.tipSafeText}>
+                All category allocations are comfortably within monthly thresholds.
+              </Text>
+            </View>
+          )}
+        </View>
+      </View>
+
+      {/* Edit Budget Modal */}
+      <Modal visible={Boolean(modalCategory)} animationType="fade" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalBox, { backgroundColor: theme.card, borderColor: theme.border }]}>
+            <Text style={[styles.modalTitle, { color: theme.text }]}>
+              Set Budget: {modalCategory}
+            </Text>
+            <Text style={[styles.modalSub, { color: theme.textSecondary }]}>
+              Enter monthly target limit in {currency.code} ({currency.symbol}).
+            </Text>
+
+            <TextInput
+              style={[styles.modalInput, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
+              placeholder="0.00"
+              placeholderTextColor={theme.textMuted}
+              keyboardType="decimal-pad"
+              value={modalAmount}
+              onChangeText={setModalAmount}
+              autoFocus
+            />
+
+            <View style={styles.modalBtnRow}>
+              <TouchableOpacity
+                style={[styles.modalCancelBtn, { borderColor: theme.border }]}
+                onPress={() => setModalCategory(null)}
+              >
+                <Text style={[styles.modalCancelText, { color: theme.textSecondary }]}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.modalSaveBtn, { backgroundColor: theme.primary }]}
+                onPress={handleSaveModal}
+              >
+                <Text style={styles.modalSaveText}>Save Limit</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20 },
-  title: { fontSize: 28, fontWeight: "700", marginTop: 16 },
-  subtitle: { marginTop: 4, marginBottom: 20, fontSize: 14 },
+  container: { flex: 1, paddingHorizontal: 18, paddingTop: 12 },
 
-  summaryCard: { padding: 20, borderRadius: 20, marginBottom: 20 },
-  summaryTitle: { fontSize: 18, fontWeight: "700", marginBottom: 15 },
-  summaryText: { fontSize: 16, marginBottom: 8 },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 14,
+  },
+  backBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingVertical: 6,
+    paddingRight: 6,
+  },
+  backText: {
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  title: { fontSize: 24, fontWeight: "900", letterSpacing: -0.3 },
+  subtitle: { fontSize: 12, marginTop: 2 },
 
-  card: { padding: 18, borderRadius: 18, marginBottom: 15 },
-  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  category: { fontSize: 17, fontWeight: "600" },
-  progressBackground: { height: 10, backgroundColor: "#E5E7EB", borderRadius: 10, overflow: "hidden", marginTop: 15 },
-  progress: { height: "100%", borderRadius: 10 },
-  remaining: { marginTop: 8, fontSize: 14 },
+  card: {
+    borderRadius: 24,
+    borderWidth: 1,
+    padding: 18,
+    marginBottom: 14,
+  },
+  cardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 14,
+  },
+  cardHeaderLeft: { flexDirection: "row", alignItems: "center", gap: 6 },
+  cardHeaderLabel: { fontSize: 10, fontWeight: "800", letterSpacing: 0.8 },
 
-  aiCard: { padding: 20, borderRadius: 20, marginTop: 10 },
-  aiTitle: { fontSize: 18, fontWeight: "700", color: "#FFFFFF", marginBottom: 14 },
-  tipBox: { marginBottom: 14, paddingBottom: 10, borderBottomWidth: 0.5, borderBottomColor: "#334155" },
-  tipHeader: { color: "#60A5FA", fontWeight: "700", fontSize: 14, marginBottom: 4 },
-  tipText: { color: "#CBD5E1", fontSize: 13, lineHeight: 20 },
+  bufferPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  bufferPillText: { fontSize: 11, fontWeight: "800" },
+
+  metricGrid: { flexDirection: "row", gap: 8, marginBottom: 14 },
+  metricBox: {
+    flex: 1,
+    padding: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+  metricLabel: { fontSize: 9, fontWeight: "800", letterSpacing: 0.5 },
+  metricValue: { fontSize: 13, fontWeight: "900", marginTop: 4 },
+
+  progressHeader: { flexDirection: "row", justifyContent: "space-between", marginBottom: 6 },
+  progressLabel: { fontSize: 11, fontWeight: "700" },
+  progressValue: { fontSize: 11, fontWeight: "800" },
+  progressBarTrack: { height: 10, borderRadius: 5, borderWidth: 1, overflow: "hidden" },
+  progressBarFill: { height: "100%", borderRadius: 5 },
+
+  sectionTitle: { fontSize: 15, fontWeight: "800", marginTop: 6, marginBottom: 10 },
+  categoriesGrid: { gap: 8 },
+  catCard: {
+    padding: 14,
+    borderRadius: 18,
+    borderWidth: 1,
+  },
+  catCardHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  catLeft: { flexDirection: "row", alignItems: "center", gap: 6, flex: 1 },
+  catDot: { width: 7, height: 7, borderRadius: 4 },
+  catName: { fontSize: 13, fontWeight: "800" },
+  catRight: { flexDirection: "row", alignItems: "center", gap: 6 },
+  catAmountText: { fontSize: 11, fontWeight: "700" },
+  catTrack: { height: 6, borderRadius: 3, borderWidth: 1, overflow: "hidden" },
+  catFill: { height: "100%", borderRadius: 3 },
+  catFooter: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 8,
+    paddingTop: 6,
+  },
+  catUtilized: { fontSize: 10, fontWeight: "600" },
+  catRemaining: { fontSize: 10, fontWeight: "800" },
+
+  guidanceHeader: { flexDirection: "row", alignItems: "center", gap: 8 },
+  guidanceIconBg: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  guidanceTitle: { fontSize: 13, fontWeight: "800" },
+
+  tipRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    padding: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    gap: 8,
+  },
+  tipDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: "#F59E0B", marginTop: 5 },
+  tipTitle: { fontSize: 12, fontWeight: "800" },
+  tipBody: { fontSize: 11, marginTop: 2, lineHeight: 16 },
+
+  tipSafeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    padding: 10,
+    backgroundColor: "rgba(16, 185, 129, 0.1)",
+    borderRadius: 14,
+  },
+  tipSafeText: { color: "#10B981", fontSize: 11, fontWeight: "700", flex: 1 },
+
+  // Modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    justifyContent: "center",
+    padding: 24,
+  },
+  modalBox: {
+    borderRadius: 24,
+    borderWidth: 1,
+    padding: 20,
+  },
+  modalTitle: { fontSize: 16, fontWeight: "900" },
+  modalSub: { fontSize: 12, marginTop: 4, marginBottom: 14 },
+  modalInput: {
+    height: 48,
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    fontSize: 18,
+    fontWeight: "800",
+    marginBottom: 16,
+  },
+  modalBtnRow: { flexDirection: "row", gap: 10 },
+  modalCancelBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    alignItems: "center",
+  },
+  modalCancelText: { fontSize: 13, fontWeight: "700" },
+  modalSaveBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 14,
+    alignItems: "center",
+  },
+  modalSaveText: { color: "#FFFFFF", fontSize: 13, fontWeight: "800" },
 });

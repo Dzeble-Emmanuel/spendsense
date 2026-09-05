@@ -1,11 +1,19 @@
 class HealthScorer:
     @staticmethod
     def calculate_score(income: float, expenses: float, transaction_count: int) -> dict:
+        # Cold-Start Guardrail: when user has fewer than 3 transactions or zero activity
+        if transaction_count < 3 or (income <= 0 and expenses <= 0):
+            return {
+                "score": 100,
+                "status": "Pending Activity",
+                "factors": {"savingsRate": 0.0, "expenseRatio": 0.0}
+            }
+
         if income <= 0:
             return {
                 "score": 0,
                 "status": "Needs Improvement",
-                "factors": {"savingsRate": 0, "expenseRatio": 100}
+                "factors": {"savingsRate": 0.0, "expenseRatio": 100.0}
             }
 
         savings = income - expenses
@@ -47,6 +55,6 @@ class HealthScorer:
             "status": status,
             "factors": {
                 "savingsRate": round(savings_rate, 1),
-                "expenseRatio": round((expenses / income) * 100, 1) if income > 0 else 100
+                "expenseRatio": round((expenses / income) * 100, 1) if income > 0 else 100.0
             }
         }

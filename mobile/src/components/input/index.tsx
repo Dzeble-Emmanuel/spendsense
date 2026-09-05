@@ -14,6 +14,7 @@ interface InputProps extends TextInputProps {
   error?: string;
   containerStyle?: ViewStyle;
   icon?: React.ReactNode;
+  style?: any;
 }
 
 export function Input({
