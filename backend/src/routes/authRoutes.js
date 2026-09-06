@@ -28,5 +28,6 @@ router.post("/send-verification-otp", otpLimiter, authController.sendVerificatio
 router.post("/verify-otp", otpLimiter, authController.verifyOtp);
 router.post("/forgot-password", otpLimiter, authController.forgotPassword);
 router.post("/reset-password", otpLimiter, authController.resetPassword);
+router.delete("/account", authMiddleware, authController.deleteAccount);
 
 module.exports = router;

@@ -30,6 +30,7 @@ export interface AuthContextType {
   verifyEmailOtp: (code: string) => Promise<{ success: boolean; error?: string }>;
   forgotPassword: (email: string) => Promise<{ success: boolean; error?: string }>;
   resetPassword: (email: string, code: string, newPassword: string) => Promise<{ success: boolean; error?: string }>;
+  deleteAccount: () => Promise<{ success: boolean; error?: string }>;
 }
 
 export const AuthContext = createContext<AuthContextType | null>(null);
@@ -286,6 +287,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  async function deleteAccount(): Promise<{ success: boolean; error?: string }> {
+    if (!user) {
+      return { success: false, error: "No active user session." };
+    }
+
+    const cleanEmail = user.email ? user.email.toLowerCase().trim() : "";
+    if (isDemoEmail(cleanEmail)) {
+      return {
+        success: false,
+        error: "Demo evaluation accounts are protected and cannot be deleted.",
+      };
+    }
+
+    try {
+      await api.delete("/auth/account");
+    } catch (err: any) {
+      const errMsg = err?.response?.data?.message || err.message;
+      if (err?.response?.status !== 404) {
+        return { success: false, error: errMsg || "Failed to delete account from server." };
+      }
+    }
+
+    // Wipe all local caches, storage, and user credentials
+    await AsyncStorage.removeItem("spendsense_token");
+    await AsyncStorage.removeItem("spendsense_user");
+    await AsyncStorage.removeItem("spendsense_pending_otp");
+
+    setUser(null);
+    setToken(null);
+    return { success: true };
+  }
+
   return (
     <AuthContext.Provider
       value={{
@@ -303,6 +336,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         verifyEmailOtp,
         forgotPassword,
         resetPassword,
+        deleteAccount,
       }}
     >
       {children}

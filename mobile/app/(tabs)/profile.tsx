@@ -19,7 +19,7 @@ import { useFinance } from "../../src/hooks/useFinance";
 import { useSettings } from "../../src/hooks/useSettings";
 
 export default function ProfileScreen() {
-  const { user, logout, sendVerificationOtp, verifyEmailOtp } = useAuth();
+  const { user, logout, sendVerificationOtp, verifyEmailOtp, deleteAccount } = useAuth();
   const { theme } = useTheme();
   const { income, expenses, savingsRate, transactions, subscriptions } = useFinance();
   const { formatMoney, currency } = useSettings();
@@ -84,6 +84,52 @@ export default function ProfileScreen() {
         },
       },
     ]);
+  };
+
+  const isDemoUser = Boolean(
+    user?.email &&
+      ["demo@spendsense.app", "demo2@spendsense.app", "test@spendsense.app"].includes(
+        user.email.toLowerCase().trim()
+      )
+  );
+
+  const handleDeleteAccount = () => {
+    if (isDemoUser) {
+      Alert.alert(
+        "Demo Profile Protected",
+        "Demo evaluation accounts are permanent preview profiles and cannot be deleted. You can sign out or switch accounts instead."
+      );
+      return;
+    }
+
+    Alert.alert(
+      "Delete Account",
+      "Are you sure you want to permanently delete your SpendSense account? All transactions, budgets, and saved ledger records will be wiped immediately. This action cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete Account",
+          style: "destructive",
+          onPress: async () => {
+            const res = await deleteAccount();
+            if (res.success) {
+              Alert.alert(
+                "Account Deleted",
+                "Your account and all associated financial records have been permanently purged.",
+                [
+                  {
+                    text: "OK",
+                    onPress: () => router.replace("/(auth)/login"),
+                  },
+                ]
+              );
+            } else {
+              Alert.alert("Deletion Failed", res.error || "Could not delete account. Please try again.");
+            }
+          },
+        },
+      ]
+    );
   };
 
   const handleBadgePress = () => {
@@ -304,6 +350,16 @@ export default function ProfileScreen() {
       >
         <Feather name="log-out" size={16} color="#F43F5E" />
         <Text style={styles.logoutText}>Sign Out of Account</Text>
+      </TouchableOpacity>
+
+      {/* Delete Account Button */}
+      <TouchableOpacity
+        style={[styles.deleteBtn, { backgroundColor: "rgba(244, 63, 94, 0.06)", borderColor: "rgba(244, 63, 94, 0.2)" }]}
+        onPress={handleDeleteAccount}
+        activeOpacity={0.7}
+      >
+        <Feather name="trash-2" size={15} color="#EF4444" />
+        <Text style={styles.deleteBtnText}>Permanently Delete Account</Text>
       </TouchableOpacity>
 
       <Text style={[styles.versionText, { color: theme.textMuted }]}>
@@ -531,6 +587,22 @@ const styles = StyleSheet.create({
     marginTop: 20,
   },
   logoutText: { color: "#F43F5E", fontSize: 13, fontWeight: "800" },
+  deleteBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    marginTop: 10,
+  },
+  deleteBtnText: {
+    color: "#EF4444",
+    fontSize: 12,
+    fontWeight: "700",
+    letterSpacing: 0.2,
+  },
   versionText: { textAlign: "center", fontSize: 11, marginTop: 14 },
 
   modalOverlay: {

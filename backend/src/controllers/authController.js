@@ -336,3 +336,39 @@ exports.resetPassword = async (req, res) => {
     res.status(500).json({ message: "Failed to reset password" });
   }
 };
+
+exports.deleteAccount = async (req, res) => {
+  try {
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({ message: "Authentication required" });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: { id: true, email: true },
+    });
+
+    if (!user) {
+      return res.status(404).json({ message: "Account not found" });
+    }
+
+    if (isDemoAccount(user.email)) {
+      return res.status(403).json({
+        message: "Demo testing accounts are protected and cannot be deleted.",
+      });
+    }
+
+    // Cascade deletion removes transactions, budgets, recommendations, etc.
+    await prisma.user.delete({
+      where: { id: user.id },
+    });
+
+    res.json({
+      message: "Account and associated data deleted successfully.",
+      success: true,
+    });
+  } catch (error) {
+    console.error("deleteAccount error:", error);
+    res.status(500).json({ message: "Failed to delete account" });
+  }
+};
