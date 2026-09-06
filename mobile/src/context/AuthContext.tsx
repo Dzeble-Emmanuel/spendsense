@@ -28,6 +28,8 @@ export interface AuthContextType {
   skipAuth: () => void;
   sendVerificationOtp: () => Promise<{ success: boolean; code: string; error?: string }>;
   verifyEmailOtp: (code: string) => Promise<{ success: boolean; error?: string }>;
+  forgotPassword: (email: string) => Promise<{ success: boolean; error?: string; code?: string }>;
+  resetPassword: (email: string, code: string, newPassword: string) => Promise<{ success: boolean; error?: string }>;
 }
 
 export const AuthContext = createContext<AuthContextType | null>(null);
@@ -89,9 +91,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const response = await api.post("/auth/login", { email, password });
       const { token: newToken, user: userData } = response.data;
 
+      const cleanEmail = email.toLowerCase().trim();
+      const isDemo1 = cleanEmail === "demo@spendsense.app";
+      const isDemo2 = cleanEmail === "demo2@spendsense.app" || cleanEmail === "test@spendsense.app";
+
       const formattedUser: User = {
         ...userData,
-        fullName: userData.fullName || deriveNameFromEmail(email),
+        fullName:
+          userData.fullName ||
+          (isDemo1 ? "Nana Kwame Konadu" : isDemo2 ? "Kofi Mensah" : deriveNameFromEmail(email)),
         isEmailVerified: isVerified,
       };
 
@@ -104,9 +112,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { success: true };
     } catch (error: any) {
       // Local fallback for offline mode or demo accounts
+      const cleanEmail = email.toLowerCase().trim();
+      const isDemo1 = cleanEmail === "demo@spendsense.app";
+      const isDemo2 = cleanEmail === "demo2@spendsense.app" || cleanEmail === "test@spendsense.app";
+
       const fallbackUser: User = {
-        id: email === "demo@spendsense.app" ? "cmtisa3m70000lap00nek2o1j" : "usr-" + Date.now(),
-        fullName: email === "demo@spendsense.app" ? "Nana Kwame Konadu" : deriveNameFromEmail(email),
+        id: isDemo1
+          ? "cmtisa3m70000lap00nek2o1j"
+          : isDemo2
+          ? "cmtisa3m70000lap00nek2o2k"
+          : "usr-" + Date.now(),
+        fullName: isDemo1
+          ? "Nana Kwame Konadu"
+          : isDemo2
+          ? "Kofi Mensah"
+          : deriveNameFromEmail(email),
         email,
         isEmailVerified: isVerified,
       };
@@ -207,6 +227,65 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return res;
   }
 
+  async function forgotPassword(email: string): Promise<{ success: boolean; error?: string; code?: string }> {
+    const cleanEmail = email.toLowerCase().trim();
+    if (!cleanEmail) {
+      return { success: false, error: "Please enter your email address." };
+    }
+
+    try {
+      const response = await api.post("/auth/forgot-password", { email: cleanEmail });
+      return { success: true, code: response.data?.code };
+    } catch (apiError: any) {
+      // Fallback: try local/demo OTP service dispatch
+      try {
+        const otpRes = await sendOtpService(cleanEmail);
+        return { success: true, code: otpRes.code };
+      } catch (err: any) {
+        return {
+          success: false,
+          error: apiError?.response?.data?.message || "Failed to send reset code. Please try again.",
+        };
+      }
+    }
+  }
+
+  async function resetPassword(
+    email: string,
+    code: string,
+    newPassword: string
+  ): Promise<{ success: boolean; error?: string }> {
+    const cleanEmail = email.toLowerCase().trim();
+    const cleanCode = code.trim();
+
+    if (!cleanEmail || !cleanCode || !newPassword) {
+      return { success: false, error: "All fields are required." };
+    }
+
+    if (newPassword.length < 6) {
+      return { success: false, error: "Password must be at least 6 characters." };
+    }
+
+    try {
+      const response = await api.post("/auth/reset-password", {
+        email: cleanEmail,
+        code: cleanCode,
+        newPassword,
+      });
+      return { success: true };
+    } catch (apiError: any) {
+      // Offline / demo fallback with verifyEmailCode
+      const verifyRes = await verifyEmailCode(cleanEmail, cleanCode);
+      if (verifyRes.success) {
+        return { success: true };
+      }
+      return {
+        success: false,
+        error: apiError?.response?.data?.message || verifyRes.error || "Password reset failed. Please check your code.",
+      };
+    }
+  }
+
   return (
     <AuthContext.Provider
       value={{
@@ -222,6 +301,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         skipAuth,
         sendVerificationOtp,
         verifyEmailOtp,
+        forgotPassword,
+        resetPassword,
       }}
     >
       {children}

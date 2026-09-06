@@ -11,9 +11,12 @@ function getUserStorageKey(
   if (!user || !user.email) {
     return null;
   }
-  const isDemo = user.email.toLowerCase().trim() === "demo@spendsense.app";
-  if (isDemo) {
+  const cleanEmail = user.email.toLowerCase().trim();
+  if (cleanEmail === "demo@spendsense.app") {
     return `spendsense_demo_${type}`;
+  }
+  if (cleanEmail === "demo2@spendsense.app" || cleanEmail === "test@spendsense.app") {
+    return `spendsense_demo2_${type}`;
   }
   const safeId = (user.id || user.email).toLowerCase().replace(/[^a-z0-9]/g, "_");
   return `spendsense_user_${safeId}_${type}`;
@@ -445,6 +448,233 @@ export const DEMO_BUDGETS: Budget[] = [
   { category: "Other", icon: "package", budget: 300 },
 ];
 
+export const DEMO2_TRANSACTIONS: Transaction[] = [
+  // --- INFLOWS / INCOME ---
+  {
+    id: "tx-demo2-1",
+    title: "Monthly Tech Retainer Deposit",
+    amount: 5200,
+    type: "income",
+    category: "Salary",
+    description: "Remote software engineering monthly compensation",
+    date: makeIsoDate(1, 9, 0),
+    merchant: "Tech Partners West Africa",
+  },
+  {
+    id: "tx-demo2-2",
+    title: "Fintech Security Consulting",
+    amount: 1200,
+    type: "income",
+    category: "Freelance",
+    description: "API penetration test milestone fee",
+    date: makeIsoDate(4, 15, 30),
+    merchant: "Accra Fintech Lab",
+  },
+
+  // --- EXPENSES ---
+  {
+    id: "tx-demo2-3",
+    title: "KNUST Bookstore & Tech Manuals",
+    amount: 140,
+    type: "expense",
+    category: "Education",
+    description: "Distributed Systems & Machine Learning books",
+    date: makeIsoDate(2, 11, 20),
+    merchant: "KNUST Central Bookshop",
+    locationLabel: "KNUST Campus",
+  },
+  {
+    id: "tx-demo2-4",
+    title: "MTN TurboNet 4G Unlimited Data",
+    amount: 240,
+    type: "expense",
+    category: "Bills & Utilities",
+    description: "Monthly uncapped high-speed development bundle",
+    date: makeIsoDate(3, 10, 0),
+    merchant: "MTN Ghana",
+    locationLabel: "Tech Junction",
+  },
+  {
+    id: "tx-demo2-5",
+    title: "Starbites Café Work Lunch",
+    amount: 68,
+    type: "expense",
+    category: "Food & Dining",
+    description: "Grilled chicken sandwich, fries & iced latte",
+    date: makeIsoDate(2, 13, 30),
+    merchant: "Starbites Accra",
+    locationLabel: "Airport Residential",
+  },
+  {
+    id: "tx-demo2-6",
+    title: "Ayigya Spot Banku & Tilapia",
+    amount: 75,
+    type: "expense",
+    category: "Food & Dining",
+    description: "Evening dinner with engineering team",
+    date: makeIsoDate(3, 19, 45),
+    merchant: "Ayigya Local Joint",
+    locationLabel: "Ayigya",
+  },
+  {
+    id: "tx-demo2-7",
+    title: "Bolt Ride to Kejetia Central",
+    amount: 32,
+    type: "expense",
+    category: "Transport",
+    description: "Ride to Kumasi commercial centre",
+    date: makeIsoDate(4, 14, 15),
+    merchant: "Bolt Ghana",
+    locationLabel: "Kejetia",
+  },
+  {
+    id: "tx-demo2-8",
+    title: "Shell Fuel Station Ring Road",
+    amount: 180,
+    type: "expense",
+    category: "Transport",
+    description: "Shell V-Power fuel replenishment",
+    date: makeIsoDate(5, 8, 30),
+    merchant: "Shell Kumasi",
+    locationLabel: "Kumasi",
+  },
+  {
+    id: "tx-demo2-9",
+    title: "MaxMart Supermarket Provisions",
+    amount: 215,
+    type: "expense",
+    category: "Food & Dining",
+    description: "Pantry restocking, olive oil, oats & dairy",
+    date: makeIsoDate(6, 16, 20),
+    merchant: "MaxMart Accra",
+    locationLabel: "Cantonments",
+  },
+  {
+    id: "tx-demo2-10",
+    title: "ECG Smart Meter Power Units",
+    amount: 150,
+    type: "expense",
+    category: "Bills & Utilities",
+    description: "Prepaid electricity replenishment",
+    date: makeIsoDate(7, 9, 15),
+    merchant: "ECG Ghana",
+  },
+  {
+    id: "tx-demo2-11",
+    title: "Planet Fitness Gym Membership",
+    amount: 120,
+    type: "expense",
+    category: "Health & Wellness",
+    description: "Monthly gym and swimming pass",
+    date: makeIsoDate(8, 7, 0),
+    merchant: "Planet Fitness",
+  },
+  {
+    id: "tx-demo2-12",
+    title: "Silverbird Cinema IMAX Ticket",
+    amount: 55,
+    type: "expense",
+    category: "Entertainment",
+    description: "Weekend film & salted popcorn",
+    date: makeIsoDate(8, 20, 0),
+    merchant: "Silverbird Cinemas",
+    locationLabel: "Accra Mall",
+  },
+  {
+    id: "tx-demo2-13",
+    title: "TopUp Pharmacy Vitamin C & First Aid",
+    amount: 85,
+    type: "expense",
+    category: "Health & Wellness",
+    description: "Immune support supplement and medical kit",
+    date: makeIsoDate(9, 11, 40),
+    merchant: "TopUp Pharmacy",
+  },
+  {
+    id: "tx-demo2-14",
+    title: "Emergency Family MoMo Transfer",
+    amount: 150,
+    type: "expense",
+    category: "Other",
+    description: "Sent support for school semester textbooks",
+    date: makeIsoDate(10, 13, 0),
+    merchant: "MTN MoMo",
+  },
+  {
+    id: "tx-demo2-15",
+    title: "Kumasi City Mall Tech Accessories",
+    amount: 190,
+    type: "expense",
+    category: "Shopping",
+    description: "Multiport USB-C docking station & cable",
+    date: makeIsoDate(11, 15, 50),
+    merchant: "CompuGhana",
+    locationLabel: "Kumasi City Mall",
+  },
+];
+
+export const DEMO2_SUBSCRIPTIONS: Subscription[] = [
+  {
+    id: "sub-demo2-1",
+    title: "MTN TurboNet 4G Broadband",
+    amount: 240,
+    category: "Bills & Utilities",
+    billingCycle: "monthly",
+    icon: "wifi",
+    color: "#F59E0B",
+    nextDueDate: new Date(Date.now() + 18 * 86400000).toISOString().split("T")[0],
+    isActive: true,
+    startedDate: new Date(Date.now() - 180 * 86400000).toISOString().split("T")[0],
+  },
+  {
+    id: "sub-demo2-2",
+    title: "Spotify Individual Premium",
+    amount: 35,
+    category: "Entertainment",
+    billingCycle: "monthly",
+    icon: "music",
+    color: "#10B981",
+    nextDueDate: new Date(Date.now() + 12 * 86400000).toISOString().split("T")[0],
+    isActive: true,
+    startedDate: new Date(Date.now() - 240 * 86400000).toISOString().split("T")[0],
+  },
+  {
+    id: "sub-demo2-3",
+    title: "Netflix Standard Plan",
+    amount: 85,
+    category: "Entertainment",
+    billingCycle: "monthly",
+    icon: "tv",
+    color: "#F43F5E",
+    nextDueDate: new Date(Date.now() + 6 * 86400000).toISOString().split("T")[0],
+    isActive: true,
+    startedDate: new Date(Date.now() - 120 * 86400000).toISOString().split("T")[0],
+  },
+  {
+    id: "sub-demo2-4",
+    title: "Planet Fitness Gym Pass",
+    amount: 120,
+    category: "Health & Wellness",
+    billingCycle: "monthly",
+    icon: "activity",
+    color: "#3B82F6",
+    nextDueDate: new Date(Date.now() + 22 * 86400000).toISOString().split("T")[0],
+    isActive: true,
+    startedDate: new Date(Date.now() - 90 * 86400000).toISOString().split("T")[0],
+  },
+];
+
+export const DEMO2_BUDGETS: Budget[] = [
+  { category: "Food & Dining", icon: "coffee", budget: 750 },
+  { category: "Transport", icon: "navigation", budget: 400 },
+  { category: "Shopping", icon: "shopping-bag", budget: 400 },
+  { category: "Bills & Utilities", icon: "zap", budget: 600 },
+  { category: "Entertainment", icon: "film", budget: 200 },
+  { category: "Health & Wellness", icon: "activity", budget: 300 },
+  { category: "Education", icon: "book", budget: 250 },
+  { category: "Other", icon: "package", budget: 300 },
+];
+
 export type FinanceContextType = {
   transactions: Transaction[];
   addTransaction: (transaction: Omit<Transaction, "id"> | Transaction) => void;
@@ -471,6 +701,7 @@ export type FinanceContextType = {
   syncWithBackend: () => Promise<void>;
   clearAllData: () => Promise<void>;
   seedDemoData: () => Promise<void>;
+  seedDemo2Data: () => Promise<void>;
 };
 
 export const FinanceContext = createContext<FinanceContextType | null>(null);
@@ -548,13 +779,15 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      const isDemo = activeUser.email.toLowerCase().trim() === "demo@spendsense.app";
+      const cleanEmail = activeUser.email.toLowerCase().trim();
+      const isDemo1 = cleanEmail === "demo@spendsense.app";
+      const isDemo2 = cleanEmail === "demo2@spendsense.app" || cleanEmail === "test@spendsense.app";
       const txKey = getUserStorageKey("tx", activeUser)!;
       const budgetsKey = getUserStorageKey("budgets", activeUser)!;
       const subsKey = getUserStorageKey("subs", activeUser)!;
 
-      if (isDemo) {
-        // DEMO LOGIN ONLY: Provide comprehensive dataset for FYP defense presentation
+      if (isDemo1) {
+        // DEMO LOGIN 1 (Nana Kwame Konadu - Pre-verified Account)
         const savedTx = await AsyncStorage.getItem(txKey);
         let parsedTx: Transaction[] = [];
         try {
@@ -593,6 +826,46 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
           setSubscriptions(DEMO_SUBSCRIPTIONS);
           await AsyncStorage.setItem(subsKey, JSON.stringify(DEMO_SUBSCRIPTIONS));
         }
+      } else if (isDemo2) {
+        // DEMO LOGIN 2 (Kofi Mensah - Unverified Account)
+        const savedTx = await AsyncStorage.getItem(txKey);
+        let parsedTx: Transaction[] = [];
+        try {
+          parsedTx = savedTx ? JSON.parse(savedTx) : [];
+        } catch {}
+
+        if (parsedTx.length > 0) {
+          setTransactions(parsedTx);
+        } else {
+          setTransactions(DEMO2_TRANSACTIONS);
+          await AsyncStorage.setItem(txKey, JSON.stringify(DEMO2_TRANSACTIONS));
+        }
+
+        const savedBudgets = await AsyncStorage.getItem(budgetsKey);
+        let parsedBudgets: Budget[] = [];
+        try {
+          parsedBudgets = savedBudgets ? JSON.parse(savedBudgets) : [];
+        } catch {}
+
+        if (parsedBudgets.length > 0) {
+          setBudgets(parsedBudgets);
+        } else {
+          setBudgets(DEMO2_BUDGETS);
+          await AsyncStorage.setItem(budgetsKey, JSON.stringify(DEMO2_BUDGETS));
+        }
+
+        const savedSubs = await AsyncStorage.getItem(subsKey);
+        let parsedSubs: Subscription[] = [];
+        try {
+          parsedSubs = savedSubs ? JSON.parse(savedSubs) : [];
+        } catch {}
+
+        if (parsedSubs.length > 0) {
+          setSubscriptions(parsedSubs);
+        } else {
+          setSubscriptions(DEMO2_SUBSCRIPTIONS);
+          await AsyncStorage.setItem(subsKey, JSON.stringify(DEMO2_SUBSCRIPTIONS));
+        }
       } else {
         // PERSONAL REGISTERED ACCOUNT: Strictly user-owned data only; starts clean
         const savedTx = await AsyncStorage.getItem(txKey);
@@ -600,7 +873,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
           try {
             const parsed = JSON.parse(savedTx);
             const userOnly = Array.isArray(parsed)
-              ? parsed.filter((t: Transaction) => !t.id?.startsWith("tx-demo-"))
+              ? parsed.filter((t: Transaction) => !t.id?.startsWith("tx-demo-") && !t.id?.startsWith("tx-demo2-"))
               : [];
             setTransactions(userOnly);
           } catch {
@@ -627,7 +900,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
           try {
             const parsed = JSON.parse(savedSubs);
             const userOnly = Array.isArray(parsed)
-              ? parsed.filter((s: Subscription) => !s.id?.startsWith("sub-demo-"))
+              ? parsed.filter((s: Subscription) => !s.id?.startsWith("sub-demo-") && !s.id?.startsWith("sub-demo2-"))
               : [];
             setSubscriptions(userOnly);
           } catch {
@@ -659,6 +932,23 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       AsyncStorage.setItem(txKey, JSON.stringify(DEMO_TRANSACTIONS)),
       AsyncStorage.setItem(subsKey, JSON.stringify(DEMO_SUBSCRIPTIONS)),
       AsyncStorage.setItem(budgetsKey, JSON.stringify(DEMO_BUDGETS)),
+    ]);
+  }
+
+  async function seedDemo2Data() {
+    setTransactions(DEMO2_TRANSACTIONS);
+    setSubscriptions(DEMO2_SUBSCRIPTIONS);
+    setBudgets(DEMO2_BUDGETS);
+
+    const demo2User = { email: "demo2@spendsense.app", id: "demo2" };
+    const txKey = getUserStorageKey("tx", demo2User)!;
+    const budgetsKey = getUserStorageKey("budgets", demo2User)!;
+    const subsKey = getUserStorageKey("subs", demo2User)!;
+
+    await Promise.all([
+      AsyncStorage.setItem(txKey, JSON.stringify(DEMO2_TRANSACTIONS)),
+      AsyncStorage.setItem(subsKey, JSON.stringify(DEMO2_SUBSCRIPTIONS)),
+      AsyncStorage.setItem(budgetsKey, JSON.stringify(DEMO2_BUDGETS)),
     ]);
   }
 
@@ -862,6 +1152,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         syncWithBackend,
         clearAllData,
         seedDemoData,
+        seedDemo2Data,
       }}
     >
       {children}

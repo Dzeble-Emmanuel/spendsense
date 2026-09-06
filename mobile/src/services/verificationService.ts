@@ -10,11 +10,19 @@ export interface PendingOtpRecord {
   expiresAt: number;
 }
 
+const DEMO_ACCOUNTS = ["demo@spendsense.app", "demo2@spendsense.app", "test@spendsense.app"];
+export const isDemoEmail = (email: string): boolean => {
+  if (!email) return false;
+  return DEMO_ACCOUNTS.includes(email.toLowerCase().trim());
+};
+
 export async function checkEmailVerified(email: string): Promise<boolean> {
   if (!email) return false;
   const cleanEmail = email.toLowerCase().trim();
+  // Demo 1 (demo@spendsense.app) is pre-verified for instant access
   if (cleanEmail === "demo@spendsense.app") return true;
 
+  // Demo 2 (demo2@spendsense.app) and regular accounts check local storage (defaults to UNVERIFIED)
   try {
     const raw = await AsyncStorage.getItem(STORAGE_KEY_VERIFIED_EMAILS);
     if (!raw) return false;
@@ -23,6 +31,19 @@ export async function checkEmailVerified(email: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+export async function resetDemo2Verification(): Promise<void> {
+  try {
+    const raw = await AsyncStorage.getItem(STORAGE_KEY_VERIFIED_EMAILS);
+    if (raw) {
+      let list: string[] = JSON.parse(raw);
+      if (Array.isArray(list)) {
+        list = list.filter((e) => e !== "demo2@spendsense.app" && e !== "test@spendsense.app");
+        await AsyncStorage.setItem(STORAGE_KEY_VERIFIED_EMAILS, JSON.stringify(list));
+      }
+    }
+  } catch {}
 }
 
 export async function sendVerificationOtp(email: string): Promise<{ success: boolean; code: string; error?: string }> {
@@ -73,8 +94,8 @@ export async function verifyEmailCode(email: string, inputCode: string): Promise
   const cleanEmail = email.toLowerCase().trim();
   const cleanCode = inputCode.trim();
 
-  // 1. Universal testing/examiner bypass code
-  if (cleanCode === "123456") {
+  // 1. Master testing/examiner code (strictly works ONLY for authorized demo accounts)
+  if (isDemoEmail(cleanEmail) && cleanCode === "123456") {
     await markEmailAsVerified(cleanEmail);
     return { success: true };
   }

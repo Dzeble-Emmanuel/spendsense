@@ -8,5 +8,7 @@ router.post("/login", authController.login);
 router.get("/profile", authMiddleware, authController.getProfile);
 router.post("/send-verification-otp", authController.sendVerificationOtp);
 router.post("/verify-otp", authController.verifyOtp);
+router.post("/forgot-password", authController.forgotPassword);
+router.post("/reset-password", authController.resetPassword);
 
 module.exports = router;

@@ -165,6 +165,9 @@ exports.sendVerificationOtp = async (req, res) => {
   }
 };
 
+const DEMO_ACCOUNTS = ["demo@spendsense.app", "demo2@spendsense.app", "test@spendsense.app"];
+const isDemoAccount = (email) => Boolean(email && DEMO_ACCOUNTS.includes(email.toLowerCase().trim()));
+
 exports.verifyOtp = async (req, res) => {
   try {
     const { email, code } = req.body;
@@ -172,12 +175,14 @@ exports.verifyOtp = async (req, res) => {
       return res.status(400).json({ message: "Email and code are required" });
     }
 
-    const record = verificationOtps.get(email.toLowerCase());
-    const isMasterCode = code.trim() === "123456";
+    const cleanEmail = email.toLowerCase().trim();
+    const record = verificationOtps.get(cleanEmail);
+    // Master code 123456 works strictly for pre-authorized demo testing accounts
+    const isMasterCode = isDemoAccount(cleanEmail) && code.trim() === "123456";
     const isValidCode = record && record.code === code.trim() && record.expiresAt > Date.now();
 
     if (isMasterCode || isValidCode) {
-      verificationOtps.delete(email.toLowerCase());
+      verificationOtps.delete(cleanEmail);
       return res.json({
         message: "Email verified successfully",
         verified: true,
@@ -190,3 +195,92 @@ exports.verifyOtp = async (req, res) => {
     res.status(500).json({ message: "Verification failed" });
   }
 };
+
+exports.forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ message: "Email is required" });
+    }
+
+    const cleanEmail = email.toLowerCase().trim();
+
+    // Verify account exists
+    const user = await prisma.user.findUnique({
+      where: { email: cleanEmail },
+    });
+
+    if (!user) {
+      return res.status(404).json({ message: "No account found with this email address" });
+    }
+
+    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+    verificationOtps.set(cleanEmail, {
+      code: otpCode,
+      expiresAt: Date.now() + 15 * 60 * 1000,
+    });
+
+    console.log(`[SpendSense Password Reset] 6-digit OTP code for ${cleanEmail}: ${otpCode}`);
+
+    const emailResult = await sendVerificationEmail(cleanEmail, otpCode);
+
+    res.json({
+      message: "Password reset code sent to your email",
+      code: otpCode,
+      emailDelivered: emailResult.success,
+    });
+  } catch (error) {
+    console.error("forgotPassword error:", error);
+    res.status(500).json({ message: "Failed to process password reset request" });
+  }
+};
+
+exports.resetPassword = async (req, res) => {
+  try {
+    const { email, code, newPassword } = req.body;
+    if (!email || !code || !newPassword) {
+      return res.status(400).json({ message: "Email, reset code, and new password are required" });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ message: "Password must be at least 6 characters long" });
+    }
+
+    const cleanEmail = email.toLowerCase().trim();
+    const record = verificationOtps.get(cleanEmail);
+    // Master code 123456 works strictly for pre-authorized demo testing accounts
+    const isMasterCode = isDemoAccount(cleanEmail) && code.trim() === "123456";
+    const isValidCode = record && record.code === code.trim() && record.expiresAt > Date.now();
+
+    if (!isMasterCode && !isValidCode) {
+      return res.status(400).json({ message: "Invalid or expired reset code" });
+    }
+
+    // Verify user exists in database
+    const user = await prisma.user.findUnique({
+      where: { email: cleanEmail },
+    });
+
+    if (!user) {
+      return res.status(404).json({ message: "User account not found" });
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    await prisma.user.update({
+      where: { email: cleanEmail },
+      data: { password: hashedPassword },
+    });
+
+    verificationOtps.delete(cleanEmail);
+
+    res.json({
+      message: "Password reset successfully. You can now log in with your new password.",
+      success: true,
+    });
+  } catch (error) {
+    console.error("resetPassword error:", error);
+    res.status(500).json({ message: "Failed to reset password" });
+  }
+};
+

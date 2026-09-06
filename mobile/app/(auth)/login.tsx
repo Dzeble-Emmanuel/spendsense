@@ -16,6 +16,7 @@ import { Feather, Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../../src/context/AuthContext";
 import { useFinance } from "../../src/hooks/useFinance";
 import { useTheme } from "../../src/hooks/useTheme";
+import { resetDemo2Verification } from "../../src/services/verificationService";
 
 export default function LoginScreen() {
   const [email, setEmail] = useState("");
@@ -24,7 +25,7 @@ export default function LoginScreen() {
   const [isLoading, setIsLoading] = useState(false);
 
   const { login } = useAuth();
-  const { seedDemoData } = useFinance();
+  const { seedDemoData, seedDemo2Data } = useFinance();
   const { theme } = useTheme();
   const router = useRouter();
 
@@ -40,8 +41,11 @@ export default function LoginScreen() {
     setIsLoading(false);
 
     if (res.success) {
-      if (email.trim().toLowerCase() === "demo@spendsense.app") {
+      const cleanEmail = email.trim().toLowerCase();
+      if (cleanEmail === "demo@spendsense.app") {
         await seedDemoData();
+      } else if (cleanEmail === "demo2@spendsense.app" || cleanEmail === "test@spendsense.app") {
+        await seedDemo2Data();
       }
       router.replace("/(tabs)");
     } else {
@@ -54,6 +58,16 @@ export default function LoginScreen() {
     setIsLoading(true);
     await seedDemoData();
     await login("demo@spendsense.app", "password123");
+    setIsLoading(false);
+    router.replace("/(tabs)");
+  };
+
+  const handleDemo2Login = async () => {
+    setError("");
+    setIsLoading(true);
+    await resetDemo2Verification();
+    await seedDemo2Data();
+    await login("demo2@spendsense.app", "password123");
     setIsLoading(false);
     router.replace("/(tabs)");
   };
@@ -117,7 +131,15 @@ export default function LoginScreen() {
             </View>
 
             <View style={styles.inputContainer}>
-              <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>PASSWORD</Text>
+              <View style={styles.inputLabelRow}>
+                <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>PASSWORD</Text>
+                <TouchableOpacity
+                  onPress={() => router.push("/(auth)/forgot-password")}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.forgotPasswordText}>Forgot password?</Text>
+                </TouchableOpacity>
+              </View>
               <View style={[styles.inputWrap, { backgroundColor: theme.card, borderColor: theme.border }]}>
                 <Feather name="lock" size={18} color={theme.textMuted} style={styles.inputIcon} />
                 <TextInput
@@ -155,7 +177,7 @@ export default function LoginScreen() {
               <View style={[styles.dividerLine, { backgroundColor: theme.border }]} />
             </View>
 
-            {/* Quick Demo Access Button */}
+            {/* Quick Demo Access Buttons */}
             <TouchableOpacity
               style={[styles.demoButton, { backgroundColor: theme.card, borderColor: theme.border }]}
               onPress={handleDemoLogin}
@@ -163,7 +185,17 @@ export default function LoginScreen() {
               activeOpacity={0.8}
             >
               <Ionicons name="sparkles" size={16} color="#10B981" />
-              <Text style={[styles.demoButtonText, { color: theme.text }]}>Quick Demo Access (Pre-loaded Data)</Text>
+              <Text style={[styles.demoButtonText, { color: theme.text }]}>Demo 1: Nana Kwame (Verified Vault)</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.demo2Button, { backgroundColor: theme.card, borderColor: "rgba(245, 158, 11, 0.3)" }]}
+              onPress={handleDemo2Login}
+              disabled={isLoading}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="shield-outline" size={16} color="#F59E0B" />
+              <Text style={[styles.demo2ButtonText, { color: theme.text }]}>Demo 2: Kofi Mensah (Unverified Vault)</Text>
             </TouchableOpacity>
           </View>
 
@@ -261,6 +293,16 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     letterSpacing: 0.8,
   },
+  inputLabelRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  forgotPasswordText: {
+    color: "#3B82F6",
+    fontSize: 11,
+    fontWeight: "700",
+  },
   inputWrap: {
     flexDirection: "row",
     alignItems: "center",
@@ -328,6 +370,22 @@ const styles = StyleSheet.create({
   },
   demoButtonText: {
     color: "#10B981",
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  demo2Button: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: "rgba(245, 158, 11, 0.08)",
+    borderWidth: 1,
+    height: 48,
+    borderRadius: 16,
+    marginTop: -4,
+  },
+  demo2ButtonText: {
+    color: "#F59E0B",
     fontSize: 13,
     fontWeight: "800",
   },
