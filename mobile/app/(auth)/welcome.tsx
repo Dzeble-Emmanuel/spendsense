@@ -15,14 +15,29 @@ const SLIDES = [
     icon: "activity" as const,
   },
   {
-    title: "Offline SMS & MoMo Parsing",
-    desc: "Extract financial records directly from bank or Mobile Money alert texts without needing an active internet connection.",
+    title: "Dynamic Custom Budgeting",
+    desc: "Create, delete, and customize personalized category limits with custom vector icons and overspending alerts.",
+    icon: "pie-chart" as const,
+  },
+  {
+    title: "AI Receipt OCR Scanner",
+    desc: "Snap a photo of any receipt to instantly extract itemized expenses, merchant details, and tax amounts into your ledger.",
+    icon: "camera" as const,
+  },
+  {
+    title: "MoMo SMS Auto-Sync",
+    desc: "Extract financial records directly from Mobile Money (MTN, Telecel, AT) and bank alert texts without manual entry.",
     icon: "message-square" as const,
   },
   {
-    title: "Predictive Expense Intelligence",
-    desc: "Forecast future spending cycles and flag abnormal outflows before they impact your financial freedom.",
-    icon: "trending-up" as const,
+    title: "What-If Decision Simulator",
+    desc: "Pre-test financial choices, simulate spending changes, and project the impact on your Financial Health Score.",
+    icon: "help-circle" as const,
+  },
+  {
+    title: "Subscriptions & Reports Export",
+    desc: "Audit recurring memberships with renewal radars and export comprehensive CSV financial statements anytime.",
+    icon: "file-text" as const,
   },
 ];
 

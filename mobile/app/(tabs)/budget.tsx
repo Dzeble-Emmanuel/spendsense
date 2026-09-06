@@ -8,6 +8,7 @@ import {
   Modal,
   TextInput,
   Alert,
+  ActivityIndicator,
 } from "react-native";
 import { Feather, Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
@@ -20,9 +21,28 @@ import { useSubFeatureBack } from "../../src/hooks/useSubFeatureBack";
 import { useAuth } from "../../src/context/AuthContext";
 import UnverifiedFeatureGate from "../../src/components/common/UnverifiedFeatureGate";
 
+const CATEGORY_ICON_OPTIONS = [
+  "tag",
+  "shopping-bag",
+  "coffee",
+  "navigation",
+  "zap",
+  "film",
+  "activity",
+  "book",
+  "package",
+  "wifi",
+  "home",
+  "heart",
+  "dollar-sign",
+  "briefcase",
+  "gift",
+  "tool",
+] as const;
+
 export default function BudgetScreen() {
-  const { user } = useAuth();
-  const { budgets, updateBudget, transactions } = useFinance();
+  const { user, verifyEmailOtp, sendVerificationOtp } = useAuth();
+  const { budgets, updateBudget, addBudget, deleteBudget, transactions } = useFinance();
   const { theme } = useTheme();
   const { formatMoney, currency } = useSettings();
   const insets = useSafeAreaInsets();
@@ -33,6 +53,49 @@ export default function BudgetScreen() {
   const [modalCategory, setModalCategory] = useState<string | null>(null);
   const [modalAmount, setModalAmount] = useState("");
   const [showGateModal, setShowGateModal] = useState(false);
+
+  // Custom Category Creation State
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newCatName, setNewCatName] = useState("");
+  const [newCatAmount, setNewCatAmount] = useState("");
+  const [newCatIcon, setNewCatIcon] = useState<string>("tag");
+
+  // Inline Banner Verification State
+  const [bannerOtp, setBannerOtp] = useState("");
+  const [bannerVerifying, setBannerVerifying] = useState(false);
+  const [bannerSending, setBannerSending] = useState(false);
+  const [bannerMsg, setBannerMsg] = useState<string | null>(null);
+  const [bannerErr, setBannerErr] = useState<string | null>(null);
+
+  const handleBannerActivate = async () => {
+    if (!bannerOtp.trim() || bannerOtp.trim().length < 6) {
+      setBannerErr("Please enter the 6-digit code.");
+      return;
+    }
+    setBannerErr(null);
+    setBannerMsg(null);
+    setBannerVerifying(true);
+    const res = await verifyEmailOtp(bannerOtp.trim());
+    setBannerVerifying(false);
+    if (res.success) {
+      setBannerMsg("Email verified successfully! Custom budgets unlocked.");
+    } else {
+      setBannerErr(res.error || "Incorrect code. Please try again.");
+    }
+  };
+
+  const handleBannerResend = async () => {
+    setBannerErr(null);
+    setBannerMsg(null);
+    setBannerSending(true);
+    const res = await sendVerificationOtp();
+    setBannerSending(false);
+    if (res.success) {
+      setBannerMsg("6-digit code dispatched to your email.");
+    } else {
+      setBannerErr(res.error || "Unable to dispatch code.");
+    }
+  };
 
   const totalBudget = budgets.reduce((sum, b) => sum + b.budget, 0);
   const totalSpent = transactions
@@ -56,6 +119,66 @@ export default function BudgetScreen() {
       .reduce((sum, t) => sum + t.amount, 0);
     return item.budget > 0 && spent > item.budget * 0.7;
   });
+
+  const openCreateModal = () => {
+    if (!user?.isEmailVerified) {
+      setShowGateModal(true);
+      return;
+    }
+    setNewCatName("");
+    setNewCatAmount("");
+    setNewCatIcon("tag");
+    setShowCreateModal(true);
+  };
+
+  const handleSaveNewCategory = () => {
+    const trimmed = newCatName.trim();
+    if (!trimmed) {
+      Alert.alert("Missing Name", "Please enter a category name.");
+      return;
+    }
+    const val = parseFloat(newCatAmount || "0");
+    if (isNaN(val) || val < 0) {
+      Alert.alert("Invalid Limit", "Please enter a valid positive number.");
+      return;
+    }
+    const exists = budgets.some(
+      (b) => b.category.toLowerCase() === trimmed.toLowerCase()
+    );
+    if (exists) {
+      Alert.alert("Category Exists", `"${trimmed}" is already in your budget categories.`);
+      return;
+    }
+
+    addBudget(trimmed, val, newCatIcon);
+    setShowCreateModal(false);
+    setNewCatName("");
+    setNewCatAmount("");
+  };
+
+  const handleDeleteCategory = (category: string) => {
+    if (!user?.isEmailVerified) {
+      setShowGateModal(true);
+      return;
+    }
+    Alert.alert(
+      "Delete Budget Category",
+      `Are you sure you want to remove "${category}" from your budget categories? Recorded transactions in this category will be preserved.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => {
+            deleteBudget(category);
+            if (modalCategory === category) {
+              setModalCategory(null);
+            }
+          },
+        },
+      ]
+    );
+  };
 
   const openEditModal = (category: string, currentLimit: number) => {
     if (!user?.isEmailVerified) {
@@ -201,128 +324,230 @@ export default function BudgetScreen() {
 
       {/* Category Limits & Allowances */}
       <View style={styles.sectionHeaderRow}>
-        <Text style={[styles.sectionTitle, { color: theme.text, marginBottom: 0 }]}>
-          Category Limits & Allowances
-        </Text>
-        {!user?.isEmailVerified && (
-          <TouchableOpacity
-            style={[styles.miniLockBadge, { backgroundColor: "rgba(245, 158, 11, 0.1)", borderColor: "rgba(245, 158, 11, 0.25)" }]}
-            onPress={() => setShowGateModal(true)}
-            activeOpacity={0.7}
-          >
-            <Feather name="lock" size={10} color="#F59E0B" />
-            <Text style={styles.miniLockText}>VERIFY TO EDIT</Text>
-          </TouchableOpacity>
-        )}
-      </View>
+        <View style={{ flex: 1, paddingRight: 8 }}>
+          <Text style={[styles.sectionTitle, { color: theme.text, marginBottom: 0 }]}>
+            Category Limits & Allowances
+          </Text>
+          <Text style={[styles.sectionSub, { color: theme.textSecondary }]}>
+            {budgets.length} custom & tracked categories
+          </Text>
+        </View>
 
-      {/* Unverified Budget Creation Notice Banner */}
-      {!user?.isEmailVerified && (
         <TouchableOpacity
-          style={[styles.budgetLockedBanner, { backgroundColor: theme.card, borderColor: "rgba(245, 158, 11, 0.25)" }]}
-          onPress={() => setShowGateModal(true)}
+          style={[styles.addCatBtn, { backgroundColor: theme.primary }]}
+          onPress={openCreateModal}
           activeOpacity={0.8}
         >
-          <View style={[styles.budgetLockedIconBox, { backgroundColor: "rgba(245, 158, 11, 0.12)" }]}>
-            <Feather name="lock" size={14} color="#F59E0B" />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.budgetLockedTitle, { color: theme.text }]}>Budget Creation Locked</Text>
-            <Text style={[styles.budgetLockedSub, { color: theme.textSecondary }]}>
-              Verify your email address to set and customize category budget caps.
-            </Text>
-          </View>
-          <View style={[styles.verifyPill, { backgroundColor: "rgba(37, 99, 235, 0.12)", borderColor: "rgba(37, 99, 235, 0.3)" }]}>
-            <Text style={styles.verifyPillText}>Unlock</Text>
-            <Feather name="arrow-right" size={11} color="#3B82F6" />
-          </View>
+          <Feather name="plus" size={13} color="#FFFFFF" />
+          <Text style={styles.addCatBtnText}>Add Category</Text>
         </TouchableOpacity>
+      </View>
+
+      {/* Unverified Budget Creation Notice Banner with Direct Textbox & Activate Button */}
+      {!user?.isEmailVerified && (
+        <View
+          style={[styles.budgetLockedBanner, { backgroundColor: theme.card, borderColor: "rgba(245, 158, 11, 0.25)" }]}
+        >
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+            <View style={[styles.budgetLockedIconBox, { backgroundColor: "rgba(245, 158, 11, 0.12)" }]}>
+              <Feather name="lock" size={14} color="#F59E0B" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.budgetLockedTitle, { color: theme.text }]}>Budget Creation Locked</Text>
+              <Text style={[styles.budgetLockedSub, { color: theme.textSecondary }]}>
+                Enter the 6-digit verification code sent to your email to activate custom budget creation.
+              </Text>
+            </View>
+          </View>
+
+          {bannerErr ? (
+            <View style={[styles.bannerAlert, { backgroundColor: "rgba(244, 63, 94, 0.1)", borderColor: "rgba(244, 63, 94, 0.3)" }]}>
+              <Feather name="alert-circle" size={12} color="#F43F5E" />
+              <Text style={{ color: "#F43F5E", fontSize: 11, fontWeight: "700", flex: 1 }}>{bannerErr}</Text>
+            </View>
+          ) : null}
+
+          {bannerMsg ? (
+            <View style={[styles.bannerAlert, { backgroundColor: "rgba(16, 185, 129, 0.1)", borderColor: "rgba(16, 185, 129, 0.3)" }]}>
+              <Feather name="check-circle" size={12} color="#10B981" />
+              <Text style={{ color: "#10B981", fontSize: 11, fontWeight: "700", flex: 1 }}>{bannerMsg}</Text>
+            </View>
+          ) : null}
+
+          {/* Textbox and Activate button */}
+          <View style={styles.bannerFormRow}>
+            <View style={[styles.bannerInputWrap, { backgroundColor: theme.background, borderColor: theme.border }]}>
+              <Feather name="key" size={13} color={theme.textMuted} style={{ marginRight: 6 }} />
+              <TextInput
+                style={[styles.bannerInput, { color: theme.text }]}
+                placeholder="123456"
+                placeholderTextColor={theme.textMuted}
+                value={bannerOtp}
+                onChangeText={setBannerOtp}
+                keyboardType="number-pad"
+                maxLength={6}
+                onSubmitEditing={handleBannerActivate}
+                returnKeyType="done"
+              />
+            </View>
+
+            <TouchableOpacity
+              style={[styles.bannerActivateBtn, bannerVerifying && { opacity: 0.6 }]}
+              onPress={handleBannerActivate}
+              disabled={bannerVerifying}
+              activeOpacity={0.85}
+            >
+              {bannerVerifying ? (
+                <ActivityIndicator color="#FFFFFF" size="small" />
+              ) : (
+                <>
+                  <Feather name="check" size={13} color="#FFFFFF" />
+                  <Text style={styles.bannerActivateText}>Activate</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.bannerFooterRow}>
+            <TouchableOpacity onPress={handleBannerResend} disabled={bannerSending} activeOpacity={0.7}>
+              <Text style={{ color: theme.primary, fontSize: 11, fontWeight: "700" }}>
+                {bannerSending ? "Sending code..." : "Resend Code"}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity onPress={() => setShowGateModal(true)} activeOpacity={0.7}>
+              <Text style={{ color: theme.textMuted, fontSize: 11, fontWeight: "600" }}>
+                More Details
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       )}
 
       <View style={styles.categoriesGrid}>
-        {budgets.map((item) => {
-          const spent = transactions
-            .filter(
-              (t) =>
-                t.type === "expense" &&
-                (t.category.toLowerCase().includes(item.category.toLowerCase().split(" ")[0]) ||
-                  item.category.toLowerCase().includes(t.category.toLowerCase().split(" ")[0]))
-            )
-            .reduce((sum, t) => sum + t.amount, 0);
-
-          const hasLimit = item.budget > 0;
-          const remaining = item.budget - spent;
-          const percentage = hasLimit
-            ? Math.min(Math.round((spent / item.budget) * 100), 100)
-            : 0;
-
-          const isOver = hasLimit && spent > item.budget;
-          const isWarning = hasLimit && !isOver && spent >= item.budget * 0.7;
-
-          return (
+        {budgets.length === 0 ? (
+          <View style={[styles.emptyBudgetCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+            <Feather name="pie-chart" size={32} color={theme.textMuted} />
+            <Text style={[styles.emptyBudgetTitle, { color: theme.text }]}>No categories configured</Text>
+            <Text style={[styles.emptyBudgetSub, { color: theme.textSecondary }]}>
+              Create your own custom budget categories to track spending limits.
+            </Text>
             <TouchableOpacity
-              key={item.category}
-              style={[styles.catCard, { backgroundColor: theme.card, borderColor: theme.border }]}
-              onPress={() => openEditModal(item.category, item.budget)}
-              activeOpacity={0.7}
+              style={[styles.addCatBtn, { backgroundColor: theme.primary, marginTop: 10, paddingHorizontal: 16 }]}
+              onPress={openCreateModal}
+              activeOpacity={0.8}
             >
-              <View style={styles.catCardHeader}>
-                <View style={styles.catLeft}>
-                  <View style={[styles.catDot, { backgroundColor: theme.primary }]} />
-                  <Text style={[styles.catName, { color: theme.text }]} numberOfLines={1}>
-                    {item.category}
-                  </Text>
-                </View>
-
-                <View style={styles.catRight}>
-                  <Text style={[styles.catAmountText, { color: theme.textSecondary }]}>
-                    {formatMoney(spent)} / {hasLimit ? formatMoney(item.budget) : "No limit"}
-                  </Text>
-                  <Feather
-                    name={user?.isEmailVerified ? "edit-2" : "lock"}
-                    size={13}
-                    color={user?.isEmailVerified ? theme.textMuted : "#F59E0B"}
-                  />
-                </View>
-              </View>
-
-              {/* Progress Bar */}
-              <View style={[styles.catTrack, { backgroundColor: theme.subCard, borderColor: theme.border }]}>
-                <View
-                  style={[
-                    styles.catFill,
-                    {
-                      width: `${hasLimit ? percentage : 0}%`,
-                      backgroundColor: isOver
-                        ? "#F43F5E"
-                        : isWarning
-                        ? "#F59E0B"
-                        : "#10B981",
-                    },
-                  ]}
-                />
-              </View>
-
-              <View style={styles.catFooter}>
-                <Text style={[styles.catUtilized, { color: theme.textMuted }]}>
-                  {hasLimit ? `${percentage}% utilized` : "Tap to set budget"}
-                </Text>
-                {hasLimit && (
-                  <Text
-                    style={[
-                      styles.catRemaining,
-                      { color: remaining >= 0 ? "#10B981" : "#F43F5E" },
-                    ]}
-                  >
-                    {remaining >= 0
-                      ? `${formatMoney(remaining)} left`
-                      : `Over by ${formatMoney(Math.abs(remaining))}`}
-                  </Text>
-                )}
-              </View>
+              <Feather name="plus" size={13} color="#FFFFFF" />
+              <Text style={styles.addCatBtnText}>Add First Category</Text>
             </TouchableOpacity>
-          );
-        })}
+          </View>
+        ) : (
+          budgets.map((item) => {
+            const spent = transactions
+              .filter(
+                (t) =>
+                  t.type === "expense" &&
+                  (t.category.toLowerCase().includes(item.category.toLowerCase().split(" ")[0]) ||
+                    item.category.toLowerCase().includes(t.category.toLowerCase().split(" ")[0]))
+              )
+              .reduce((sum, t) => sum + t.amount, 0);
+
+            const hasLimit = item.budget > 0;
+            const remaining = item.budget - spent;
+            const percentage = hasLimit
+              ? Math.min(Math.round((spent / item.budget) * 100), 100)
+              : 0;
+
+            const isOver = hasLimit && spent > item.budget;
+            const isWarning = hasLimit && !isOver && spent >= item.budget * 0.7;
+
+            return (
+              <View
+                key={item.category}
+                style={[styles.catCard, { backgroundColor: theme.card, borderColor: theme.border }]}
+              >
+                <View style={styles.catCardHeader}>
+                  <TouchableOpacity
+                    style={styles.catLeft}
+                    onPress={() => openEditModal(item.category, item.budget)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={[styles.catIconBox, { backgroundColor: `${theme.primary}18` }]}>
+                      <Feather name={(item.icon || "tag") as any} size={13} color={theme.primary} />
+                    </View>
+                    <Text style={[styles.catName, { color: theme.text }]} numberOfLines={1}>
+                      {item.category}
+                    </Text>
+                  </TouchableOpacity>
+
+                  <View style={styles.catRight}>
+                    <Text style={[styles.catAmountText, { color: theme.textSecondary }]}>
+                      {formatMoney(spent)} / {hasLimit ? formatMoney(item.budget) : "No limit"}
+                    </Text>
+                    <TouchableOpacity
+                      style={styles.catActionIconBtn}
+                      onPress={() => openEditModal(item.category, item.budget)}
+                      hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+                    >
+                      <Feather
+                        name={user?.isEmailVerified ? "edit-2" : "lock"}
+                        size={13}
+                        color={user?.isEmailVerified ? theme.textMuted : "#F59E0B"}
+                      />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.catActionIconBtn}
+                      onPress={() => handleDeleteCategory(item.category)}
+                      hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+                    >
+                      <Feather name="trash-2" size={13} color="#F43F5E" />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                {/* Progress Bar */}
+                <TouchableOpacity
+                  onPress={() => openEditModal(item.category, item.budget)}
+                  activeOpacity={0.7}
+                >
+                  <View style={[styles.catTrack, { backgroundColor: theme.subCard, borderColor: theme.border }]}>
+                    <View
+                      style={[
+                        styles.catFill,
+                        {
+                          width: `${hasLimit ? percentage : 0}%`,
+                          backgroundColor: isOver
+                            ? "#F43F5E"
+                            : isWarning
+                            ? "#F59E0B"
+                            : "#10B981",
+                        },
+                      ]}
+                    />
+                  </View>
+
+                  <View style={styles.catFooter}>
+                    <Text style={[styles.catUtilized, { color: theme.textMuted }]}>
+                      {hasLimit ? `${percentage}% utilized` : "Tap to set budget"}
+                    </Text>
+                    {hasLimit && (
+                      <Text
+                        style={[
+                          styles.catRemaining,
+                          { color: remaining >= 0 ? "#10B981" : "#F43F5E" },
+                        ]}
+                      >
+                        {remaining >= 0
+                          ? `${formatMoney(remaining)} left`
+                          : `Over by ${formatMoney(Math.abs(remaining))}`}
+                      </Text>
+                    )}
+                  </View>
+                </TouchableOpacity>
+              </View>
+            );
+          })
+        )}
       </View>
 
       {/* Practical Budget Guidance Section */}
@@ -403,6 +628,108 @@ export default function BudgetScreen() {
                 onPress={handleSaveModal}
               >
                 <Text style={styles.modalSaveText}>Save Limit</Text>
+              </TouchableOpacity>
+            </View>
+
+            {modalCategory && (
+              <TouchableOpacity
+                style={styles.modalDeleteCategoryBtn}
+                onPress={() => {
+                  const cat = modalCategory;
+                  setModalCategory(null);
+                  handleDeleteCategory(cat);
+                }}
+                activeOpacity={0.7}
+              >
+                <Feather name="trash-2" size={13} color="#F43F5E" />
+                <Text style={styles.modalDeleteCategoryText}>Delete Category</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Create Custom Category Modal */}
+      <Modal visible={showCreateModal} animationType="fade" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalBox, { backgroundColor: theme.card, borderColor: theme.border, maxHeight: "85%" }]}>
+            <View style={styles.modalHeaderRow}>
+              <Text style={[styles.modalTitle, { color: theme.text }]}>
+                New Budget Category
+              </Text>
+              <TouchableOpacity
+                onPress={() => setShowCreateModal(false)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Feather name="x" size={18} color={theme.textMuted} />
+              </TouchableOpacity>
+            </View>
+            <Text style={[styles.modalSub, { color: theme.textSecondary }]}>
+              Create a personalized category with a monthly limit and vector icon.
+            </Text>
+
+            <Text style={[styles.fieldLabel, { color: theme.textMuted }]}>CATEGORY NAME</Text>
+            <TextInput
+              style={[styles.createInput, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
+              placeholder="e.g. Groceries, Gym, Tech, Travel"
+              placeholderTextColor={theme.textMuted}
+              value={newCatName}
+              onChangeText={setNewCatName}
+              maxLength={24}
+              autoFocus
+            />
+
+            <Text style={[styles.fieldLabel, { color: theme.textMuted }]}>MONTHLY LIMIT ({currency.symbol})</Text>
+            <TextInput
+              style={[styles.createInput, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
+              placeholder="0.00 (optional)"
+              placeholderTextColor={theme.textMuted}
+              keyboardType="decimal-pad"
+              value={newCatAmount}
+              onChangeText={setNewCatAmount}
+            />
+
+            <Text style={[styles.fieldLabel, { color: theme.textMuted }]}>SELECT ICON</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
+              <View style={styles.iconGrid}>
+                {CATEGORY_ICON_OPTIONS.map((iconName) => {
+                  const isSelected = newCatIcon === iconName;
+                  return (
+                    <TouchableOpacity
+                      key={iconName}
+                      style={[
+                        styles.iconChoice,
+                        {
+                          backgroundColor: isSelected ? theme.primary : theme.subCard,
+                          borderColor: isSelected ? theme.primary : theme.border,
+                        },
+                      ]}
+                      onPress={() => setNewCatIcon(iconName)}
+                    >
+                      <Feather
+                        name={iconName as any}
+                        size={16}
+                        color={isSelected ? "#FFFFFF" : theme.text}
+                      />
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </ScrollView>
+
+            <View style={styles.modalBtnRow}>
+              <TouchableOpacity
+                style={[styles.modalCancelBtn, { borderColor: theme.border }]}
+                onPress={() => setShowCreateModal(false)}
+              >
+                <Text style={[styles.modalCancelText, { color: theme.textSecondary }]}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.modalSaveBtn, { backgroundColor: theme.primary }]}
+                onPress={handleSaveNewCategory}
+              >
+                <Text style={styles.modalSaveText}>Create Category</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -487,6 +814,7 @@ const styles = StyleSheet.create({
   progressBarFill: { height: "100%", borderRadius: 5 },
 
   sectionTitle: { fontSize: 15, fontWeight: "800", marginTop: 6, marginBottom: 10 },
+  sectionSub: { fontSize: 11, marginTop: 2 },
   categoriesGrid: { gap: 8 },
   catCard: {
     padding: 14,
@@ -610,13 +938,10 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   budgetLockedBanner: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
     borderWidth: 1,
-    borderRadius: 14,
-    padding: 12,
-    marginBottom: 12,
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 14,
   },
   budgetLockedIconBox: {
     width: 32,
@@ -647,5 +972,148 @@ const styles = StyleSheet.create({
     color: "#3B82F6",
     fontSize: 11,
     fontWeight: "800",
+  },
+  bannerAlert: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginTop: 8,
+  },
+  bannerFormRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 10,
+  },
+  bannerInputWrap: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    height: 38,
+  },
+  bannerInput: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "700",
+    letterSpacing: 2,
+  },
+  bannerActivateBtn: {
+    backgroundColor: "#2563EB",
+    height: 38,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+  },
+  bannerActivateText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  bannerFooterRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 8,
+    paddingHorizontal: 2,
+  },
+  addCatBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+  },
+  addCatBtnText: {
+    color: "#FFFFFF",
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  catIconBox: {
+    width: 24,
+    height: 24,
+    borderRadius: 7,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  catActionIconBtn: {
+    padding: 4,
+    borderRadius: 6,
+  },
+  modalDeleteCategoryBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(244, 63, 94, 0.15)",
+  },
+  modalDeleteCategoryText: {
+    color: "#F43F5E",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  modalHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  fieldLabel: {
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.6,
+    marginBottom: 6,
+  },
+  createInput: {
+    height: 44,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    fontSize: 14,
+    fontWeight: "600",
+    marginBottom: 12,
+  },
+  iconGrid: {
+    flexDirection: "row",
+    gap: 8,
+    paddingVertical: 4,
+  },
+  iconChoice: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    borderWidth: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  emptyBudgetCard: {
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 28,
+    borderRadius: 20,
+    borderWidth: 1,
+    gap: 8,
+  },
+  emptyBudgetTitle: {
+    fontSize: 15,
+    fontWeight: "800",
+    marginTop: 4,
+  },
+  emptyBudgetSub: {
+    fontSize: 12,
+    textAlign: "center",
+    lineHeight: 16,
   },
 });

@@ -32,19 +32,6 @@ export default function SMSImportScreen() {
   const insets = useSafeAreaInsets();
   const handleBack = useSubFeatureBack("/(tabs)/profile");
 
-  if (!user?.isEmailVerified) {
-    return (
-      <UnverifiedFeatureGate
-        featureName="MoMo SMS Auto-Sync"
-        featureDescription="Email verification is required to enable automated Mobile Money SMS background parsing and live payment synchronization."
-        iconName="message-square"
-        onBack={handleBack}
-      />
-    );
-  }
-
-  const topPadding = insets.top > 0 ? insets.top + 10 : 20;
-
   const {
     permissions,
     autoSync,
@@ -57,6 +44,19 @@ export default function SMSImportScreen() {
   const [smsText, setSmsText] = useState("");
   const [parsed, setParsed] = useState<ParsedSMSResult | null>(null);
   const [simulationToast, setSimulationToast] = useState<string | null>(null);
+
+  if (!user?.isEmailVerified) {
+    return (
+      <UnverifiedFeatureGate
+        featureName="MoMo SMS Auto-Sync"
+        featureDescription="Email verification is required to enable automated Mobile Money SMS background parsing and live payment synchronization."
+        iconName="message-square"
+        onBack={handleBack}
+      />
+    );
+  }
+
+  const topPadding = insets.top > 0 ? insets.top + 10 : 20;
 
   const handlePasteClipboard = async () => {
     try {

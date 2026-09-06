@@ -90,17 +90,6 @@ export default function WhatIfScreen() {
   const insets = useSafeAreaInsets();
   const handleBack = useSubFeatureBack("/(tabs)/predictions");
 
-  if (!user?.isEmailVerified) {
-    return (
-      <UnverifiedFeatureGate
-        featureName="What-If Decision Simulator"
-        featureDescription="Email verification is required to run multi-scenario forecasting models, testing spending shifts, and budget capacity projections."
-        iconName="help-circle"
-        onBack={handleBack}
-      />
-    );
-  }
-
   const topPadding = insets.top > 0 ? insets.top + 10 : 20;
 
   const [selectedCategory, setSelectedCategory] = useState("Food & Dining");
@@ -224,6 +213,17 @@ export default function WhatIfScreen() {
       ]
     );
   };
+
+  if (!user?.isEmailVerified) {
+    return (
+      <UnverifiedFeatureGate
+        featureName="What-If Decision Simulator"
+        featureDescription="Email verification is required to run multi-scenario forecasting models, testing spending shifts, and budget capacity projections."
+        iconName="help-circle"
+        onBack={handleBack}
+      />
+    );
+  }
 
   return (
     <ScrollView

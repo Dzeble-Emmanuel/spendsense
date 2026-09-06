@@ -19,7 +19,7 @@ import { useFinance } from "../../src/hooks/useFinance";
 import { useSettings } from "../../src/hooks/useSettings";
 
 export default function ProfileScreen() {
-  const { user, logout, sendVerificationOtp, verifyEmailOtp, deleteAccount } = useAuth();
+  const { user, logout, sendVerificationOtp, verifyEmailOtp } = useAuth();
   const { theme } = useTheme();
   const { income, expenses, savingsRate, transactions, subscriptions } = useFinance();
   const { formatMoney, currency } = useSettings();
@@ -86,52 +86,6 @@ export default function ProfileScreen() {
     ]);
   };
 
-  const isDemoUser = Boolean(
-    user?.email &&
-      ["demo@spendsense.app", "demo2@spendsense.app", "test@spendsense.app"].includes(
-        user.email.toLowerCase().trim()
-      )
-  );
-
-  const handleDeleteAccount = () => {
-    if (isDemoUser) {
-      Alert.alert(
-        "Demo Profile Protected",
-        "Demo evaluation accounts are permanent preview profiles and cannot be deleted. You can sign out or switch accounts instead."
-      );
-      return;
-    }
-
-    Alert.alert(
-      "Delete Account",
-      "Are you sure you want to permanently delete your SpendSense account? All transactions, budgets, and saved ledger records will be wiped immediately. This action cannot be undone.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete Account",
-          style: "destructive",
-          onPress: async () => {
-            const res = await deleteAccount();
-            if (res.success) {
-              Alert.alert(
-                "Account Deleted",
-                "Your account and all associated financial records have been permanently purged.",
-                [
-                  {
-                    text: "OK",
-                    onPress: () => router.replace("/(auth)/login"),
-                  },
-                ]
-              );
-            } else {
-              Alert.alert("Deletion Failed", res.error || "Could not delete account. Please try again.");
-            }
-          },
-        },
-      ]
-    );
-  };
-
   const handleBadgePress = () => {
     if (user?.isEmailVerified) {
       Alert.alert(
@@ -146,14 +100,20 @@ export default function ProfileScreen() {
   const openVerifyModal = () => {
     setOtpCode("");
     setModalError("");
-    setModalMessage("");
-    setOtpDispatched(false);
+    setOtpDispatched(true);
+    const clean = user?.email?.toLowerCase().trim();
+    const isDemo = clean && ["demo@spendsense.app", "demo2@spendsense.app", "test@spendsense.app"].includes(clean);
+    setModalMessage(
+      isDemo
+        ? `Enter the 6-digit code sent to ${user?.email || "your email"}.\n(Demo accounts can use master bypass code: 123456)`
+        : `Sending 6-digit verification code to ${user?.email || "your email"}...`
+    );
     setShowVerifyModal(true);
+    handleSendOtp();
   };
 
   const handleSendOtp = async () => {
     setModalError("");
-    setModalMessage("");
     setIsSendingOtp(true);
 
     const res = await sendVerificationOtp();
@@ -259,27 +219,81 @@ export default function ProfileScreen() {
         </View>
       </View>
 
-      {/* Unverified Email Action Banner */}
+      {/* Unverified Email Action Banner with Direct Textbox & Activate Button */}
       {!user?.isEmailVerified && (
-        <TouchableOpacity
-          style={[styles.unverifiedBanner, { backgroundColor: theme.card, borderColor: "rgba(245, 158, 11, 0.3)" }]}
-          onPress={openVerifyModal}
-          activeOpacity={0.8}
+        <View
+          style={[
+            styles.unverifiedBanner,
+            { backgroundColor: theme.card, borderColor: "rgba(245, 158, 11, 0.3)" },
+          ]}
         >
-          <View style={[styles.bannerIconBox, { backgroundColor: "rgba(245, 158, 11, 0.15)" }]}>
-            <Feather name="shield" size={18} color="#F59E0B" />
+          <View style={styles.bannerHeaderRow}>
+            <View style={[styles.bannerIconBox, { backgroundColor: "rgba(245, 158, 11, 0.15)" }]}>
+              <Feather name="shield" size={18} color="#F59E0B" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.bannerTitle, { color: theme.text }]}>Email Verification Required</Text>
+              <Text style={[styles.bannerSubtitle, { color: theme.textSecondary }]}>
+                Enter the 6-digit code sent to your email to activate all features.
+              </Text>
+            </View>
           </View>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.bannerTitle, { color: theme.text }]}>Email Not Verified</Text>
-            <Text style={[styles.bannerSubtitle, { color: theme.textSecondary }]}>
-              Verify for free with a 6-digit code to activate your verified badge.
-            </Text>
+
+          {modalError ? (
+            <View style={[styles.errorBox, { marginTop: 10, paddingVertical: 8 }]}>
+              <Feather name="alert-triangle" size={13} color="#F43F5E" />
+              <Text style={[styles.errorText, { fontSize: 11 }]}>{modalError}</Text>
+            </View>
+          ) : null}
+
+          {/* Textbox & Activate Button directly present */}
+          <View style={styles.bannerFormRow}>
+            <View style={[styles.bannerInputWrap, { backgroundColor: theme.background, borderColor: theme.border }]}>
+              <Feather name="key" size={14} color={theme.textMuted} style={{ marginRight: 6 }} />
+              <TextInput
+                style={[styles.bannerInput, { color: theme.text }]}
+                placeholder="123456"
+                placeholderTextColor={theme.textMuted}
+                value={otpCode}
+                onChangeText={setOtpCode}
+                keyboardType="number-pad"
+                maxLength={6}
+                onSubmitEditing={handleConfirmOtp}
+                returnKeyType="done"
+              />
+            </View>
+
+            <TouchableOpacity
+              style={[styles.bannerActivateBtn, isVerifyingOtp && styles.btnDisabled]}
+              onPress={handleConfirmOtp}
+              disabled={isVerifyingOtp}
+              activeOpacity={0.85}
+            >
+              {isVerifyingOtp ? (
+                <ActivityIndicator color="#FFFFFF" size="small" />
+              ) : (
+                <>
+                  <Feather name="check" size={14} color="#FFFFFF" />
+                  <Text style={styles.bannerActivateText}>Activate</Text>
+                </>
+              )}
+            </TouchableOpacity>
           </View>
-          <View style={styles.verifyActionBtn}>
-            <Text style={styles.verifyActionText}>Verify</Text>
-            <Feather name="chevron-right" size={14} color="#F59E0B" />
+
+          <View style={styles.bannerFooterRow}>
+            <TouchableOpacity onPress={handleSendOtp} disabled={isSendingOtp} activeOpacity={0.7}>
+              <Text style={[styles.bannerResendText, { color: theme.primary }]}>
+                {isSendingOtp ? "Sending code..." : "Resend Code"}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity onPress={openVerifyModal} activeOpacity={0.7}>
+              <Text style={[styles.bannerHelpText, { color: theme.textMuted }]}>
+                Open Full Dialog
+              </Text>
+            </TouchableOpacity>
           </View>
-        </TouchableOpacity>
+        </View>
       )}
 
       {/* 4-Grid Stats Overview */}
@@ -352,16 +366,6 @@ export default function ProfileScreen() {
         <Text style={styles.logoutText}>Sign Out of Account</Text>
       </TouchableOpacity>
 
-      {/* Delete Account Button */}
-      <TouchableOpacity
-        style={[styles.deleteBtn, { backgroundColor: "rgba(244, 63, 94, 0.06)", borderColor: "rgba(244, 63, 94, 0.2)" }]}
-        onPress={handleDeleteAccount}
-        activeOpacity={0.7}
-      >
-        <Feather name="trash-2" size={15} color="#EF4444" />
-        <Text style={styles.deleteBtnText}>Permanently Delete Account</Text>
-      </TouchableOpacity>
-
       <Text style={[styles.versionText, { color: theme.textMuted }]}>
         SpendSense Client v1.1.0 • Mobile-Optimized Finance
       </Text>
@@ -405,66 +409,54 @@ export default function ProfileScreen() {
               </View>
             ) : null}
 
-            {!otpDispatched ? (
+            <View style={{ gap: 12 }}>
+              <View style={[styles.inputWrap, { backgroundColor: theme.background, borderColor: theme.border }]}>
+                <Feather name="key" size={16} color={theme.textMuted} style={{ marginRight: 8 }} />
+                <TextInput
+                  style={[styles.otpInput, { color: theme.text }]}
+                  placeholder="123456"
+                  placeholderTextColor={theme.textMuted}
+                  value={otpCode}
+                  onChangeText={setOtpCode}
+                  keyboardType="number-pad"
+                  maxLength={6}
+                  autoFocus
+                />
+              </View>
+
               <TouchableOpacity
-                style={[styles.primaryActionBtn, isSendingOtp && styles.btnDisabled]}
-                onPress={handleSendOtp}
-                disabled={isSendingOtp}
+                style={[styles.primaryActionBtn, isVerifyingOtp && styles.btnDisabled]}
+                onPress={handleConfirmOtp}
+                disabled={isVerifyingOtp}
                 activeOpacity={0.85}
               >
-                {isSendingOtp ? (
+                {isVerifyingOtp ? (
                   <ActivityIndicator color="#FFFFFF" />
                 ) : (
                   <>
-                    <Feather name="send" size={15} color="#FFFFFF" />
-                    <Text style={styles.primaryActionBtnText}>Send Free 6-Digit Code</Text>
+                    <Feather name="check" size={16} color="#FFFFFF" />
+                    <Text style={styles.primaryActionBtnText}>Activate</Text>
                   </>
                 )}
               </TouchableOpacity>
-            ) : (
-              <View style={{ gap: 12 }}>
-                <View style={[styles.inputWrap, { backgroundColor: theme.background, borderColor: theme.border }]}>
-                  <Feather name="key" size={16} color={theme.textMuted} style={{ marginRight: 8 }} />
-                  <TextInput
-                    style={[styles.otpInput, { color: theme.text }]}
-                    placeholder="Enter 6-digit code"
-                    placeholderTextColor={theme.textMuted}
-                    value={otpCode}
-                    onChangeText={setOtpCode}
-                    keyboardType="numeric"
-                    maxLength={6}
-                    autoFocus
-                  />
-                </View>
 
-                <TouchableOpacity
-                  style={[styles.primaryActionBtn, isVerifyingOtp && styles.btnDisabled]}
-                  onPress={handleConfirmOtp}
-                  disabled={isVerifyingOtp}
-                  activeOpacity={0.85}
-                >
-                  {isVerifyingOtp ? (
-                    <ActivityIndicator color="#FFFFFF" />
-                  ) : (
-                    <>
-                      <Feather name="check" size={16} color="#FFFFFF" />
-                      <Text style={styles.primaryActionBtnText}>Verify & Activate</Text>
-                    </>
-                  )}
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.resendBtn}
-                  onPress={handleSendOtp}
-                  disabled={isSendingOtp}
-                  activeOpacity={0.7}
-                >
+              <TouchableOpacity
+                style={styles.resendBtn}
+                onPress={handleSendOtp}
+                disabled={isSendingOtp}
+                activeOpacity={0.7}
+              >
+                {isSendingOtp ? (
+                  <Text style={[styles.resendText, { color: theme.textMuted }]}>
+                    Sending 6-digit code...
+                  </Text>
+                ) : (
                   <Text style={[styles.resendText, { color: theme.textSecondary }]}>
                     Didn't receive code? <Text style={{ color: theme.primary, fontWeight: "700" }}>Resend Code</Text>
                   </Text>
-                </TouchableOpacity>
-              </View>
-            )}
+                )}
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -511,13 +503,15 @@ const styles = StyleSheet.create({
   memberSince: { fontSize: 10, marginTop: 2 },
 
   unverifiedBanner: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
     padding: 14,
     borderRadius: 18,
     borderWidth: 1,
     marginBottom: 14,
+  },
+  bannerHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
   },
   bannerIconBox: {
     width: 36,
@@ -535,19 +529,56 @@ const styles = StyleSheet.create({
     marginTop: 2,
     lineHeight: 15,
   },
-  verifyActionBtn: {
+  bannerFormRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 2,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    backgroundColor: "rgba(245, 158, 11, 0.15)",
+    gap: 8,
+    marginTop: 12,
   },
-  verifyActionText: {
-    color: "#F59E0B",
-    fontSize: 11,
+  bannerInputWrap: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    height: 40,
+  },
+  bannerInput: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "700",
+    letterSpacing: 2,
+  },
+  bannerActivateBtn: {
+    backgroundColor: "#2563EB",
+    height: 40,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+  },
+  bannerActivateText: {
+    color: "#FFFFFF",
+    fontSize: 12,
     fontWeight: "800",
+  },
+  bannerFooterRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 8,
+    paddingHorizontal: 2,
+  },
+  bannerResendText: {
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  bannerHelpText: {
+    fontSize: 11,
+    fontWeight: "600",
   },
 
   statsGrid: { flexDirection: "row", gap: 8, marginBottom: 8 },
@@ -587,22 +618,6 @@ const styles = StyleSheet.create({
     marginTop: 20,
   },
   logoutText: { color: "#F43F5E", fontSize: 13, fontWeight: "800" },
-  deleteBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    paddingVertical: 12,
-    borderRadius: 16,
-    borderWidth: 1,
-    marginTop: 10,
-  },
-  deleteBtnText: {
-    color: "#EF4444",
-    fontSize: 12,
-    fontWeight: "700",
-    letterSpacing: 0.2,
-  },
   versionText: { textAlign: "center", fontSize: 11, marginTop: 14 },
 
   modalOverlay: {

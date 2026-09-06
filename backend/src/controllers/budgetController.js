@@ -77,3 +77,32 @@ exports.setBudget = async (req, res) => {
     res.status(500).json({ message: "Error setting budget" });
   }
 };
+
+exports.deleteBudget = async (req, res) => {
+  try {
+    const { category } = req.params;
+    const currentYear = new Date().getFullYear();
+    const currentMonth = new Date().getMonth() + 1;
+
+    if (!category) {
+      return res.status(400).json({ message: "Category parameter required" });
+    }
+
+    await prisma.budget.deleteMany({
+      where: {
+        userId: req.user.id,
+        category: {
+          equals: category,
+          mode: "insensitive",
+        },
+        month: currentMonth,
+        year: currentYear,
+      },
+    });
+
+    res.json({ message: "Category budget removed successfully" });
+  } catch (error) {
+    console.error("Delete budget error:", error);
+    res.status(500).json({ message: "Error deleting budget" });
+  }
+};

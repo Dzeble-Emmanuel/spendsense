@@ -31,6 +31,9 @@ export default function ReportsScreen() {
   const insets = useSafeAreaInsets();
   const handleBack = useSubFeatureBack("/(tabs)/profile");
 
+  const [selectedPeriod, setSelectedPeriod] = useState<ReportPeriod>("this_month");
+  const [isExporting, setIsExporting] = useState(false);
+
   if (!user?.isEmailVerified) {
     return (
       <UnverifiedFeatureGate
@@ -43,9 +46,6 @@ export default function ReportsScreen() {
   }
 
   const topPadding = insets.top > 0 ? insets.top + 10 : 20;
-
-  const [selectedPeriod, setSelectedPeriod] = useState<ReportPeriod>("this_month");
-  const [isExporting, setIsExporting] = useState(false);
 
   const periods: { label: string; value: ReportPeriod }[] = [
     { label: "This Month", value: "this_month" },

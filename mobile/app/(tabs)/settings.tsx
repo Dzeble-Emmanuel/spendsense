@@ -33,25 +33,54 @@ export default function SettingsScreen() {
     setCurrency,
     exchangeRates,
   } = useSettings();
-  const { clearAllData, seedDemoData } = useFinance();
+  const { clearAllData } = useFinance();
   const { isAvailable: biometricAvailable, biometricType, authenticate } = useBiometric();
-  const { logout, user } = useAuth();
+  const { user, deleteAccount } = useAuth();
   const insets = useSafeAreaInsets();
   const handleBack = useSubFeatureBack("/(tabs)/profile");
 
   const [showCurrencyModal, setShowCurrencyModal] = useState(false);
 
-  const handleRestoreDemoData = () => {
+  const isDemoUser = Boolean(
+    user?.email &&
+      ["demo@spendsense.app", "demo2@spendsense.app", "test@spendsense.app"].includes(
+        user.email.toLowerCase().trim()
+      )
+  );
+
+  const handleDeleteAccount = () => {
+    if (isDemoUser) {
+      Alert.alert(
+        "Demo Profile Protected",
+        "Demo evaluation accounts are permanent preview profiles and cannot be deleted. You can sign out or switch accounts instead."
+      );
+      return;
+    }
+
     Alert.alert(
-      "Restore Demo Data",
-      "Reset your vault with the comprehensive Ghanaian demo dataset powering all modules (Tech Junction, KNUST, Kejetia, Ayigya, Price Shock Radar, and Silent Leak Map)?",
+      "Permanently Delete Account",
+      "Are you sure you want to permanently delete your SpendSense account? All transactions, budgets, and saved ledger records will be wiped immediately from both this device and the server. This action cannot be undone.",
       [
         { text: "Cancel", style: "cancel" },
         {
-          text: "Restore Data",
+          text: "Delete Account",
+          style: "destructive",
           onPress: async () => {
-            await seedDemoData();
-            Alert.alert("Demo Data Loaded", "All modules and screens are now populated with rich sample data.");
+            const res = await deleteAccount();
+            if (res.success) {
+              Alert.alert(
+                "Account Deleted",
+                "Your account and all associated financial records have been permanently purged.",
+                [
+                  {
+                    text: "OK",
+                    onPress: () => router.replace("/(auth)/login"),
+                  },
+                ]
+              );
+            } else {
+              Alert.alert("Deletion Failed", res.error || "Could not delete account. Please try again.");
+            }
           },
         },
       ]
@@ -89,20 +118,6 @@ export default function SettingsScreen() {
         },
       ]
     );
-  };
-
-  const handleSignOut = () => {
-    Alert.alert("Sign Out", "Are you sure you want to sign out of your SpendSense vault?", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Sign Out",
-        style: "destructive",
-        onPress: async () => {
-          await logout();
-          router.replace("/(auth)/login");
-        },
-      },
-    ]);
   };
 
   const topPadding = insets.top > 0 ? insets.top + 10 : 20;
@@ -251,15 +266,6 @@ export default function SettingsScreen() {
         </Text>
 
         <TouchableOpacity
-          style={[styles.loadDemoBtn, { backgroundColor: theme.primaryLight, borderColor: theme.primary, marginBottom: 8 }]}
-          onPress={handleRestoreDemoData}
-          activeOpacity={0.8}
-        >
-          <Feather name="refresh-cw" size={15} color={theme.primary} />
-          <Text style={[styles.loadDemoText, { color: theme.primary }]}>Load Comprehensive Demo Data</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
           style={styles.eraseBtn}
           onPress={handleClearVault}
           activeOpacity={0.8}
@@ -269,10 +275,10 @@ export default function SettingsScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Account Session & Sign Out */}
+      {/* Permanent Account Deletion */}
       <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border, marginTop: 14 }]}>
-        <Text style={[styles.sectionHeading, { color: theme.textSecondary }]}>
-          ACCOUNT SESSION
+        <Text style={[styles.sectionHeading, { color: "#F43F5E" }]}>
+          PERMANENT ACCOUNT ACTIONS
         </Text>
         <Text style={{ color: theme.text, fontSize: 15, fontWeight: "800" }}>
           {user?.fullName || "Account User"}
@@ -282,12 +288,12 @@ export default function SettingsScreen() {
         </Text>
 
         <TouchableOpacity
-          style={styles.signOutBtn}
-          onPress={handleSignOut}
+          style={styles.deleteBtn}
+          onPress={handleDeleteAccount}
           activeOpacity={0.8}
         >
-          <Feather name="log-out" size={15} color="#F43F5E" />
-          <Text style={styles.signOutText}>Sign Out of Vault</Text>
+          <Feather name="trash-2" size={15} color="#EF4444" />
+          <Text style={styles.deleteBtnText}>Permanently Delete Account</Text>
         </TouchableOpacity>
       </View>
 
@@ -398,16 +404,18 @@ const styles = StyleSheet.create({
   testLockText: { fontSize: 12, fontWeight: "800" },
 
   resetDesc: { fontSize: 11, lineHeight: 16, marginBottom: 12 },
-  loadDemoBtn: {
+  deleteBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
-    paddingVertical: 13,
-    borderRadius: 14,
+    gap: 8,
+    backgroundColor: "rgba(239, 68, 68, 0.08)",
     borderWidth: 1,
+    borderColor: "rgba(239, 68, 68, 0.3)",
+    paddingVertical: 14,
+    borderRadius: 14,
   },
-  loadDemoText: { fontSize: 12, fontWeight: "800" },
+  deleteBtnText: { color: "#EF4444", fontWeight: "800", fontSize: 13 },
   eraseBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -420,19 +428,6 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(244, 63, 94, 0.08)",
   },
   eraseText: { color: "#F43F5E", fontSize: 12, fontWeight: "800" },
-
-  signOutBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    backgroundColor: "rgba(244, 63, 94, 0.1)",
-    borderWidth: 1,
-    borderColor: "rgba(244, 63, 94, 0.3)",
-    paddingVertical: 14,
-    borderRadius: 14,
-  },
-  signOutText: { color: "#F43F5E", fontWeight: "800", fontSize: 13 },
 
   // Modal
   modalOverlay: {

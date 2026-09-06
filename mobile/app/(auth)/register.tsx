@@ -25,6 +25,8 @@ export default function RegisterScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
@@ -135,13 +137,25 @@ export default function RegisterScreen() {
               <View style={[styles.inputWrap, { backgroundColor: theme.card, borderColor: theme.border }]}>
                 <Feather name="lock" size={18} color={theme.textMuted} style={styles.inputIcon} />
                 <TextInput
-                  style={[styles.input, { color: theme.text }]}
+                  style={[styles.input, { color: theme.text, flex: 1 }]}
                   placeholder="Min 6 characters"
                   placeholderTextColor={theme.textMuted}
                   value={password}
                   onChangeText={setPassword}
-                  secureTextEntry
+                  secureTextEntry={!showPassword}
+                  autoCapitalize="none"
                 />
+                <TouchableOpacity
+                  onPress={() => setShowPassword(!showPassword)}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  style={{ padding: 4 }}
+                >
+                  <Feather
+                    name={showPassword ? "eye" : "eye-off"}
+                    size={18}
+                    color={theme.textMuted}
+                  />
+                </TouchableOpacity>
               </View>
             </View>
 
@@ -150,13 +164,25 @@ export default function RegisterScreen() {
               <View style={[styles.inputWrap, { backgroundColor: theme.card, borderColor: theme.border }]}>
                 <Feather name="shield" size={18} color={theme.textMuted} style={styles.inputIcon} />
                 <TextInput
-                  style={[styles.input, { color: theme.text }]}
+                  style={[styles.input, { color: theme.text, flex: 1 }]}
                   placeholder="Re-enter password"
                   placeholderTextColor={theme.textMuted}
                   value={confirmPassword}
                   onChangeText={setConfirmPassword}
-                  secureTextEntry
+                  secureTextEntry={!showConfirmPassword}
+                  autoCapitalize="none"
                 />
+                <TouchableOpacity
+                  onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  style={{ padding: 4 }}
+                >
+                  <Feather
+                    name={showConfirmPassword ? "eye" : "eye-off"}
+                    size={18}
+                    color={theme.textMuted}
+                  />
+                </TouchableOpacity>
               </View>
             </View>
 

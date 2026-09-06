@@ -31,7 +31,7 @@ export default function UnverifiedFeatureGate({
   const { user, sendVerificationOtp, verifyEmailOtp } = useAuth();
   const { theme } = useTheme();
 
-  const [isVerifying, setIsVerifying] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(true);
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
@@ -39,6 +39,10 @@ export default function UnverifiedFeatureGate({
 
   const cleanEmail = user?.email || "";
   const isDemo = isDemoEmail(cleanEmail);
+
+  React.useEffect(() => {
+    handleSendCode();
+  }, []);
 
   const handleSendCode = async () => {
     setLoading(true);
@@ -180,52 +184,28 @@ export default function UnverifiedFeatureGate({
             </View>
           ) : null}
 
-          {/* Interactive In-Place Verification Box */}
-          {isVerifying ? (
-            <View style={styles.codeForm}>
-              <Text style={[styles.codeLabel, { color: theme.textSecondary }]}>ENTER 6-DIGIT CODE</Text>
-              <View style={[styles.inputBox, { backgroundColor: theme.background, borderColor: theme.border }]}>
-                <Feather name="hash" size={16} color={theme.textMuted} style={{ marginRight: 8 }} />
-                <TextInput
-                  style={[styles.inputField, { color: theme.text }]}
-                  placeholder="123456"
-                  placeholderTextColor={theme.textMuted}
-                  value={code}
-                  onChangeText={setCode}
-                  keyboardType="number-pad"
-                  maxLength={6}
-                />
-              </View>
-
-              <TouchableOpacity
-                style={[styles.primaryActionBtn, loading && styles.btnDisabled]}
-                onPress={handleVerifyCode}
-                disabled={loading}
-                activeOpacity={0.85}
-              >
-                {loading ? (
-                  <ActivityIndicator color="#FFFFFF" size="small" />
-                ) : (
-                  <>
-                    <Feather name="unlock" size={15} color="#FFFFFF" />
-                    <Text style={styles.primaryActionBtnText}>Confirm & Unlock</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={handleSendCode}
-                disabled={loading}
-                style={styles.resendBtn}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.resendText, { color: theme.primary }]}>Resend Code</Text>
-              </TouchableOpacity>
+          {/* Interactive In-Place Verification Box - Always unconditionally present */}
+          <View style={styles.codeForm}>
+            <Text style={[styles.codeLabel, { color: theme.textSecondary }]}>ENTER 6-DIGIT VERIFICATION CODE</Text>
+            <View style={[styles.inputBox, { backgroundColor: theme.background, borderColor: theme.border }]}>
+              <Feather name="key" size={16} color={theme.textMuted} style={{ marginRight: 8 }} />
+              <TextInput
+                style={[styles.inputField, { color: theme.text }]}
+                placeholder="123456"
+                placeholderTextColor={theme.textMuted}
+                value={code}
+                onChangeText={setCode}
+                keyboardType="number-pad"
+                maxLength={6}
+                autoCapitalize="none"
+                onSubmitEditing={handleVerifyCode}
+                returnKeyType="done"
+              />
             </View>
-          ) : (
+
             <TouchableOpacity
               style={[styles.primaryActionBtn, loading && styles.btnDisabled]}
-              onPress={handleSendCode}
+              onPress={handleVerifyCode}
               disabled={loading}
               activeOpacity={0.85}
             >
@@ -233,12 +213,21 @@ export default function UnverifiedFeatureGate({
                 <ActivityIndicator color="#FFFFFF" size="small" />
               ) : (
                 <>
-                  <Feather name="send" size={15} color="#FFFFFF" />
-                  <Text style={styles.primaryActionBtnText}>Verify Email in 10 Seconds</Text>
+                  <Feather name="check-circle" size={16} color="#FFFFFF" />
+                  <Text style={styles.primaryActionBtnText}>Activate</Text>
                 </>
               )}
             </TouchableOpacity>
-          )}
+
+            <TouchableOpacity
+              onPress={handleSendCode}
+              disabled={loading}
+              style={styles.resendBtn}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.resendText, { color: theme.primary }]}>Resend Code</Text>
+            </TouchableOpacity>
+          </View>
 
           {/* Minimalist Demo Account Helper Note */}
           {isDemo && (

@@ -686,7 +686,9 @@ export type FinanceContextType = {
   updateTransaction: (transaction: Transaction) => void;
 
   budgets: Budget[];
-  updateBudget: (category: string, newLimit: number) => void;
+  updateBudget: (category: string, newLimit: number, newCategoryName?: string) => void;
+  addBudget: (category: string, limit: number, icon?: string) => boolean;
+  deleteBudget: (category: string) => void;
 
   subscriptions: Subscription[];
   addSubscription: (sub: Omit<Subscription, "id"> | Subscription) => void;
@@ -1023,14 +1025,84 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   }
 
   // Budget mutations
-  function updateBudget(category: string, newLimit: number) {
+  function addBudget(category: string, limit: number, icon: string = "tag"): boolean {
+    const cleanCategory = category.trim();
+    if (!cleanCategory) return false;
+
+    setBudgets((prev) => {
+      const exists = prev.some(
+        (b) => b.category.toLowerCase() === cleanCategory.toLowerCase()
+      );
+      if (exists) {
+        return prev.map((b) =>
+          b.category.toLowerCase() === cleanCategory.toLowerCase()
+            ? { ...b, budget: limit, icon: icon || b.icon }
+            : b
+        );
+      }
+      return [...prev, { category: cleanCategory, icon: icon || "tag", budget: limit }];
+    });
+
+    (async () => {
+      try {
+        const token = await AsyncStorage.getItem("spendsense_token");
+        if (token && token !== "local-token" && token !== "demo-token") {
+          await api.post("/budgets", {
+            category: cleanCategory,
+            amount: limit,
+          });
+        }
+      } catch (err) {
+        console.log("Could not sync new budget to cloud, saved locally:", err);
+      }
+    })();
+
+    return true;
+  }
+
+  function deleteBudget(category: string) {
+    const cleanCategory = category.trim();
+    setBudgets((prev) =>
+      prev.filter(
+        (b) => b.category.toLowerCase() !== cleanCategory.toLowerCase()
+      )
+    );
+
+    (async () => {
+      try {
+        const token = await AsyncStorage.getItem("spendsense_token");
+        if (token && token !== "local-token" && token !== "demo-token") {
+          await api.delete(`/budgets/${encodeURIComponent(cleanCategory)}`);
+        }
+      } catch (err) {
+        console.log("Cloud budget delete skipped:", err);
+      }
+    })();
+  }
+
+  function updateBudget(category: string, newLimit: number, newCategoryName?: string) {
+    const targetName = (newCategoryName && newCategoryName.trim()) || category;
     setBudgets((prev) =>
       prev.map((b) =>
         b.category.toLowerCase() === category.toLowerCase()
-          ? { ...b, budget: newLimit }
+          ? { ...b, category: targetName, budget: newLimit }
           : b
       )
     );
+
+    (async () => {
+      try {
+        const token = await AsyncStorage.getItem("spendsense_token");
+        if (token && token !== "local-token" && token !== "demo-token") {
+          await api.post("/budgets", {
+            category: targetName,
+            amount: newLimit,
+          });
+        }
+      } catch (err) {
+        console.log("Could not sync budget update to cloud:", err);
+      }
+    })();
   }
 
   // Subscription mutations
@@ -1159,6 +1231,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         updateTransaction,
         budgets,
         updateBudget,
+        addBudget,
+        deleteBudget,
         subscriptions,
         addSubscription,
         deleteSubscription,

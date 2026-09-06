@@ -36,6 +36,16 @@ export default function ReceiptScannerScreen() {
   const insets = useSafeAreaInsets();
   const handleBack = useSubFeatureBack("/(tabs)/transactions");
 
+  const [mode, setMode] = useState<"camera" | "review">("camera");
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [scannedData, setScannedData] = useState<ScannedData>({
+    merchant: "",
+    amount: 0,
+    category: "Shopping",
+    items: [],
+    locationLabel: "",
+  });
+
   if (!user?.isEmailVerified) {
     return (
       <UnverifiedFeatureGate
@@ -48,16 +58,6 @@ export default function ReceiptScannerScreen() {
   }
 
   const topPadding = insets.top > 0 ? insets.top + 10 : 20;
-
-  const [mode, setMode] = useState<"camera" | "review">("camera");
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [scannedData, setScannedData] = useState<ScannedData>({
-    merchant: "",
-    amount: 0,
-    category: "Shopping",
-    items: [],
-    locationLabel: "",
-  });
 
   const pickImage = async () => {
     try {

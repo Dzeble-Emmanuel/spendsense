@@ -8,5 +8,6 @@ router.use(authMiddleware);
 
 router.get("/", budgetController.getBudgets);
 router.post("/", requireVerified, budgetController.setBudget);
+router.delete("/:category", requireVerified, budgetController.deleteBudget);
 
 module.exports = router;
