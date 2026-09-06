@@ -324,7 +324,7 @@ export default function TransactionsScreen() {
           <View style={[styles.modalCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
             <View style={styles.modalHeader}>
               <View>
-                <Text style={[styles.metaLabel, { color: theme.primary }]}>LOCATION TAGGING</Text>
+                <Text style={[styles.modalSectionLabel, { color: theme.primary }]}>LOCATION TAGGING</Text>
                 <Text style={[styles.modalTitle, { color: theme.text }]} numberOfLines={1}>
                   {quickTagTx?.title}
                 </Text>

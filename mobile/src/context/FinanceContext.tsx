@@ -616,6 +616,7 @@ export const DEMO2_TRANSACTIONS: Transaction[] = [
 export const DEMO2_SUBSCRIPTIONS: Subscription[] = [
   {
     id: "sub-demo2-1",
+    name: "MTN TurboNet 4G Broadband",
     title: "MTN TurboNet 4G Broadband",
     amount: 240,
     category: "Bills & Utilities",
@@ -628,6 +629,7 @@ export const DEMO2_SUBSCRIPTIONS: Subscription[] = [
   },
   {
     id: "sub-demo2-2",
+    name: "Spotify Individual Premium",
     title: "Spotify Individual Premium",
     amount: 35,
     category: "Entertainment",
@@ -640,6 +642,7 @@ export const DEMO2_SUBSCRIPTIONS: Subscription[] = [
   },
   {
     id: "sub-demo2-3",
+    name: "Netflix Standard Plan",
     title: "Netflix Standard Plan",
     amount: 85,
     category: "Entertainment",
@@ -652,6 +655,7 @@ export const DEMO2_SUBSCRIPTIONS: Subscription[] = [
   },
   {
     id: "sub-demo2-4",
+    name: "Planet Fitness Gym Pass",
     title: "Planet Fitness Gym Pass",
     amount: 120,
     category: "Health & Wellness",
@@ -746,6 +750,24 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     }
   }, [subscriptions, isLoaded, user]);
 
+  function normalizeSubscriptions(subs: any[]): Subscription[] {
+    if (!Array.isArray(subs)) return [];
+    return subs.map((s) => ({
+      ...s,
+      id: s.id || `sub-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      name: s.name || s.title || "Subscription",
+      title: s.title || s.name || "Subscription",
+      amount: typeof s.amount === "number" ? s.amount : Number(s.amount) || 0,
+      billingCycle: s.billingCycle || "monthly",
+      category: s.category || "General",
+      icon: s.icon || "repeat",
+      color: s.color || "#2563EB",
+      nextDueDate: s.nextDueDate || new Date().toISOString().split("T")[0],
+      isActive: s.isActive !== undefined ? Boolean(s.isActive) : true,
+      startedDate: s.startedDate || new Date().toISOString().split("T")[0],
+    }));
+  }
+
   async function loadAllData() {
     setIsLoading(true);
     setIsLoaded(false);
@@ -821,7 +843,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         } catch {}
 
         if (parsedSubs.length > 0) {
-          setSubscriptions(parsedSubs);
+          setSubscriptions(normalizeSubscriptions(parsedSubs));
         } else {
           setSubscriptions(DEMO_SUBSCRIPTIONS);
           await AsyncStorage.setItem(subsKey, JSON.stringify(DEMO_SUBSCRIPTIONS));
@@ -861,7 +883,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         } catch {}
 
         if (parsedSubs.length > 0) {
-          setSubscriptions(parsedSubs);
+          setSubscriptions(normalizeSubscriptions(parsedSubs));
         } else {
           setSubscriptions(DEMO2_SUBSCRIPTIONS);
           await AsyncStorage.setItem(subsKey, JSON.stringify(DEMO2_SUBSCRIPTIONS));
@@ -902,7 +924,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
             const userOnly = Array.isArray(parsed)
               ? parsed.filter((s: Subscription) => !s.id?.startsWith("sub-demo-") && !s.id?.startsWith("sub-demo2-"))
               : [];
-            setSubscriptions(userOnly);
+            setSubscriptions(normalizeSubscriptions(userOnly));
           } catch {
             setSubscriptions([]);
           }

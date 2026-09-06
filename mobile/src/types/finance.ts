@@ -64,6 +64,7 @@ export interface Budget {
 export interface Subscription {
   id: string;
   name: string;
+  title?: string;
   amount: number;
   billingCycle: "weekly" | "monthly" | "yearly";
   category: string;

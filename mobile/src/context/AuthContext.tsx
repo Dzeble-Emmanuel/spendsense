@@ -6,6 +6,7 @@ import {
   sendVerificationOtp as sendOtpService,
   verifyEmailCode,
   markEmailAsVerified,
+  isDemoEmail,
 } from "../services/verificationService";
 
 export interface User {

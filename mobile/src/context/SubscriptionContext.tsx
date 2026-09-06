@@ -73,10 +73,10 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
 
         const days = daysUntilDue(sub.nextDueDate);
         if (days <= 0) {
-          // Auto-log as expense
+          const displayName = sub.name || sub.title || "Subscription";
           addTransaction({
             id: `sub-${sub.id}-${today}`,
-            title: `${sub.name} Subscription`,
+            title: `${displayName} Subscription`,
             amount: sub.amount,
             type: "expense",
             category: sub.category,

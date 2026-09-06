@@ -43,26 +43,34 @@ export default function SubscriptionsScreen() {
   );
   const [formNotes, setFormNotes] = useState("");
 
-  const activeSubs = subscriptions.filter((s) => s.isActive);
+  const activeSubs = subscriptions.filter((s) => s && s.isActive);
   const monthlyTotal = activeSubs.reduce((sum, s) => {
-    if (s.billingCycle === "weekly") return sum + s.amount * 4.33;
-    if (s.billingCycle === "yearly") return sum + s.amount / 12;
-    return sum + s.amount;
+    const cycle = (s.billingCycle || "monthly").toLowerCase();
+    const amt = typeof s.amount === "number" ? s.amount : Number(s.amount) || 0;
+    if (cycle === "weekly") return sum + amt * 4.33;
+    if (cycle === "yearly") return sum + amt / 12;
+    return sum + amt;
   }, 0);
 
   const yearlyTotal = monthlyTotal * 12;
 
   const dueSoon = activeSubs.filter((s) => {
-    const days = Math.ceil(
-      (new Date(s.nextDueDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
-    );
+    if (!s.nextDueDate) return false;
+    const time = new Date(s.nextDueDate).getTime();
+    if (isNaN(time)) return false;
+    const days = Math.ceil((time - Date.now()) / (1000 * 60 * 60 * 24));
     return days >= 0 && days <= 5;
   });
 
-  const getDueLabel = (nextDueDate: string) => {
-    const days = Math.ceil(
-      (new Date(nextDueDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
-    );
+  const getDueLabel = (nextDueDate?: string) => {
+    if (!nextDueDate) {
+      return { text: "Active", color: theme.textSecondary, bg: theme.subCard };
+    }
+    const time = new Date(nextDueDate).getTime();
+    if (isNaN(time)) {
+      return { text: "Active", color: theme.textSecondary, bg: theme.subCard };
+    }
+    const days = Math.ceil((time - Date.now()) / (1000 * 60 * 60 * 24));
     if (days < 0) return { text: `Overdue ${Math.abs(days)}d`, color: "#F43F5E", bg: "rgba(244, 63, 94, 0.12)" };
     if (days === 0) return { text: "Due today!", color: "#F43F5E", bg: "rgba(244, 63, 94, 0.12)" };
     if (days <= 3) return { text: `Due in ${days}d`, color: "#F59E0B", bg: "rgba(245, 158, 11, 0.12)" };
@@ -160,7 +168,7 @@ export default function SubscriptionsScreen() {
               {dueSoon.length} Renewal{dueSoon.length > 1 ? "s" : ""} Approaching
             </Text>
             <Text style={styles.dueSoonSub}>
-              {dueSoon.map((s) => `${s.name} (${formatMoney(s.amount)})`).join(" • ")}
+              {dueSoon.map((s) => `${s.name || s.title || "Subscription"} (${formatMoney(s.amount || 0)})`).join(" • ")}
             </Text>
           </View>
         </View>
@@ -216,14 +224,17 @@ export default function SubscriptionsScreen() {
         </View>
       ) : (
         subscriptions.map((sub) => {
+          const displayName = sub.name || sub.title || "Subscription";
           const due = getDueLabel(sub.nextDueDate);
+          const cycle = (sub.billingCycle || "monthly").toLowerCase();
+          const amount = typeof sub.amount === "number" ? sub.amount : Number(sub.amount) || 0;
           const monthlyEquiv =
-            sub.billingCycle === "yearly"
-              ? sub.amount / 12
-              : sub.billingCycle === "weekly"
-              ? sub.amount * 4.33
-              : sub.amount;
-          const initials = sub.name.slice(0, 2).toUpperCase();
+            cycle === "yearly"
+              ? amount / 12
+              : cycle === "weekly"
+              ? amount * 4.33
+              : amount;
+          const initials = (displayName.trim().slice(0, 2) || "SB").toUpperCase();
 
           return (
             <View
@@ -252,7 +263,7 @@ export default function SubscriptionsScreen() {
                 <View style={{ flex: 1 }}>
                   <View style={styles.subTitleRow}>
                     <Text style={[styles.subTitle, { color: theme.text }]} numberOfLines={1}>
-                      {sub.name}
+                      {displayName}
                     </Text>
                     <View style={[styles.dueBadge, { backgroundColor: due.bg }]}>
                       <Text style={[styles.dueBadgeText, { color: due.color }]}>{due.text}</Text>
@@ -260,7 +271,7 @@ export default function SubscriptionsScreen() {
                   </View>
 
                   <Text style={[styles.subDetails, { color: theme.textSecondary }]}>
-                    {sub.billingCycle.toUpperCase()} • {sub.category} • Renews {sub.nextDueDate}
+                    {(sub.billingCycle || "monthly").toUpperCase()} • {sub.category || "General"} • Renews {sub.nextDueDate || "N/A"}
                   </Text>
                 </View>
               </View>
@@ -268,7 +279,7 @@ export default function SubscriptionsScreen() {
               <View style={styles.subItemRight}>
                 <View style={{ alignItems: "flex-end" }}>
                   <Text style={[styles.subAmount, { color: theme.text }]}>
-                    {formatMoney(sub.amount)}
+                    {formatMoney(amount)}
                   </Text>
                   <Text style={[styles.subMonthlyEquiv, { color: theme.textMuted }]}>
                     ~{formatMoney(monthlyEquiv)}/mo
@@ -297,7 +308,7 @@ export default function SubscriptionsScreen() {
 
                   <TouchableOpacity
                     style={styles.deleteBtn}
-                    onPress={() => confirmDelete(sub.id, sub.name)}
+                    onPress={() => confirmDelete(sub.id, displayName)}
                   >
                     <Feather name="trash-2" size={15} color="#F43F5E" />
                   </TouchableOpacity>

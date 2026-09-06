@@ -176,7 +176,7 @@ export default function LeakMapScreen() {
           <View style={styles.inspectorHeader}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
               <View style={[styles.symbolBox, { backgroundColor: theme.primaryLight }]}>
-                <Feather name={activeZone.iconName} size={16} color={theme.primary} />
+                <Feather name={activeZone.iconName as any} size={16} color={theme.primary} />
               </View>
               <View>
                 <Text style={[styles.inspectorZoneName, { color: theme.text }]}>
@@ -302,7 +302,7 @@ export default function LeakMapScreen() {
                       ]}
                     >
                       <Feather
-                        name={loc.iconName}
+                        name={loc.iconName as any}
                         size={16}
                         color={isHigh ? "#F43F5E" : isMod ? "#F59E0B" : "#10B981"}
                       />

@@ -5,6 +5,7 @@ export type BillingCycle = "daily" | "weekly" | "monthly" | "quarterly" | "yearl
 export type Subscription = {
   id: string;
   name: string;
+  title?: string;
   amount: number;
   billingCycle: BillingCycle;
   nextDueDate: string; // ISO date string
