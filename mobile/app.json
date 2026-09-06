@@ -8,6 +8,7 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "ios": {
+      "bundleIdentifier": "com.spendsense.app",
       "supportsTablet": true,
       "infoPlist": {
         "NSCameraUsageDescription": "SpendSense uses your camera to scan receipts and add them as expenses.",
