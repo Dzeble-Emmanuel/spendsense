@@ -50,7 +50,7 @@ export default function UnverifiedFeatureGate({
         setIsVerifying(true);
         setFeedbackMessage(
           isDemo
-            ? `Verification code dispatched. (Master code: 123456 or ${res.code || ""})`
+            ? "Verification code dispatched. (Demo master bypass code: 123456)"
             : "Verification code sent to your registered inbox."
         );
       } else {

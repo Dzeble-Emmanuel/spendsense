@@ -6,8 +6,12 @@ try {
 }
 
 function getTransporter() {
-  const user = process.env.EMAIL_USER || "asuukadavid@gmail.com";
-  const pass = (process.env.EMAIL_PASS || "jdtc sjfs vdup yyzv").replace(/\s+/g, "");
+  const user = process.env.EMAIL_USER;
+  const pass = process.env.EMAIL_PASS ? process.env.EMAIL_PASS.replace(/\s+/g, "") : null;
+
+  if (!user || !pass) {
+    return null;
+  }
 
   if (!nodemailer) {
     console.log("[EmailService] Nodemailer not yet loaded. Skipping transporter creation.");
@@ -27,11 +31,11 @@ function getTransporter() {
  * Dispatches a 6-digit verification OTP code to the recipient's email address
  */
 async function sendVerificationEmail(toEmail, code) {
-  const user = process.env.EMAIL_USER || "asuukadavid@gmail.com";
+  const user = process.env.EMAIL_USER || "no-reply@spendsense.app";
   const transporter = getTransporter();
 
   if (!transporter) {
-    console.log(`[EmailService - Mock Mode] Code for ${toEmail}: ${code}`);
+    // Secure simulated mode when SMTP credentials are not configured in environment
     return { success: true, mocked: true };
   }
 

@@ -26,9 +26,9 @@ export interface AuthContextType {
   logout: () => Promise<void>;
   completeTour: () => Promise<void>;
   skipAuth: () => void;
-  sendVerificationOtp: () => Promise<{ success: boolean; code: string; error?: string }>;
+  sendVerificationOtp: () => Promise<{ success: boolean; error?: string }>;
   verifyEmailOtp: (code: string) => Promise<{ success: boolean; error?: string }>;
-  forgotPassword: (email: string) => Promise<{ success: boolean; error?: string; code?: string }>;
+  forgotPassword: (email: string) => Promise<{ success: boolean; error?: string }>;
   resetPassword: (email: string, code: string, newPassword: string) => Promise<{ success: boolean; error?: string }>;
 }
 
@@ -207,9 +207,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setToken("demo-token");
   }
 
-  async function sendVerificationOtp(): Promise<{ success: boolean; code: string; error?: string }> {
+  async function sendVerificationOtp(): Promise<{ success: boolean; error?: string }> {
     if (!user || !user.email) {
-      return { success: false, code: "", error: "No user account active." };
+      return { success: false, error: "No user account active." };
     }
     return await sendOtpService(user.email);
   }
@@ -227,20 +227,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return res;
   }
 
-  async function forgotPassword(email: string): Promise<{ success: boolean; error?: string; code?: string }> {
+  async function forgotPassword(email: string): Promise<{ success: boolean; error?: string }> {
     const cleanEmail = email.toLowerCase().trim();
     if (!cleanEmail) {
       return { success: false, error: "Please enter your email address." };
     }
 
     try {
-      const response = await api.post("/auth/forgot-password", { email: cleanEmail });
-      return { success: true, code: response.data?.code };
+      await api.post("/auth/forgot-password", { email: cleanEmail });
+      return { success: true };
     } catch (apiError: any) {
       // Fallback: try local/demo OTP service dispatch
       try {
         const otpRes = await sendOtpService(cleanEmail);
-        return { success: true, code: otpRes.code };
+        return { success: otpRes.success, error: otpRes.error };
       } catch (err: any) {
         return {
           success: false,

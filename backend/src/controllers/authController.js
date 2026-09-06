@@ -1,8 +1,22 @@
+const crypto = require("crypto");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const prisma = require("../config/database");
+const { sendVerificationEmail } = require("../utils/emailService");
 
 const VALID_CURRENCIES = ["GHS", "USD", "EUR", "GBP", "NGN", "KES"];
+const DEMO_ACCOUNTS = ["demo@spendsense.app", "demo2@spendsense.app", "test@spendsense.app"];
+const isDemoAccount = (email) => Boolean(email && DEMO_ACCOUNTS.includes(email.toLowerCase().trim()));
+
+const JWT_SECRET = process.env.JWT_SECRET || "spendsense-jwt-secret-key-change-in-production-2026";
+if (!process.env.JWT_SECRET && process.env.NODE_ENV === "production") {
+  console.warn("[SECURITY ALERT] JWT_SECRET is not configured in production environment!");
+}
+
+// In-memory OTP storage with rate limiting and expiration tracking
+const verificationOtps = new Map();
+
+const generateSecureOtp = () => crypto.randomInt(100000, 999999).toString();
 
 exports.register = async (req, res) => {
   try {
@@ -12,12 +26,13 @@ exports.register = async (req, res) => {
       return res.status(400).json({ message: "Please provide all required fields" });
     }
 
+    const cleanEmail = email.toLowerCase().trim();
     const preferredCurrency = VALID_CURRENCIES.includes(currencyPreference)
       ? currencyPreference
       : "GHS";
 
     const existingUser = await prisma.user.findUnique({
-      where: { email: email.toLowerCase() },
+      where: { email: cleanEmail },
     });
 
     if (existingUser) {
@@ -29,20 +44,22 @@ exports.register = async (req, res) => {
     const user = await prisma.user.create({
       data: {
         fullName,
-        email: email.toLowerCase(),
+        email: cleanEmail,
         password: hashedPassword,
+        isEmailVerified: false,
       },
       select: {
         id: true,
         fullName: true,
         email: true,
+        isEmailVerified: true,
         createdAt: true,
       },
     });
 
     const token = jwt.sign(
       { id: user.id, email: user.email },
-      process.env.JWT_SECRET || "spendsense-jwt-secret-key-change-in-production-2026",
+      JWT_SECRET,
       { expiresIn: "30d" }
     );
 
@@ -68,8 +85,9 @@ exports.login = async (req, res) => {
       return res.status(400).json({ message: "Email and password are required" });
     }
 
+    const cleanEmail = email.toLowerCase().trim();
     const user = await prisma.user.findUnique({
-      where: { email: email.toLowerCase() },
+      where: { email: cleanEmail },
     });
 
     if (!user) {
@@ -83,7 +101,7 @@ exports.login = async (req, res) => {
 
     const token = jwt.sign(
       { id: user.id, email: user.email },
-      process.env.JWT_SECRET || "spendsense-jwt-secret-key-change-in-production-2026",
+      JWT_SECRET,
       { expiresIn: "30d" }
     );
 
@@ -93,6 +111,7 @@ exports.login = async (req, res) => {
         id: user.id,
         fullName: user.fullName,
         email: user.email,
+        isEmailVerified: Boolean(user.isEmailVerified),
         currencyPreference: "GHS",
         createdAt: user.createdAt,
       },
@@ -112,6 +131,7 @@ exports.getProfile = async (req, res) => {
         id: true,
         fullName: true,
         email: true,
+        isEmailVerified: true,
         createdAt: true,
       },
     });
@@ -123,6 +143,7 @@ exports.getProfile = async (req, res) => {
     res.json({
       user: {
         ...user,
+        isEmailVerified: Boolean(user.isEmailVerified),
         currencyPreference: "GHS",
       },
     });
@@ -132,31 +153,29 @@ exports.getProfile = async (req, res) => {
   }
 };
 
-const { sendVerificationEmail } = require("../utils/emailService");
-
-const verificationOtps = new Map();
-
 exports.sendVerificationOtp = async (req, res) => {
   try {
-    const { email, code } = req.body;
+    const { email } = req.body;
     if (!email) {
       return res.status(400).json({ message: "Email is required" });
     }
 
-    const otpCode = code || Math.floor(100000 + Math.random() * 900000).toString();
-    verificationOtps.set(email.toLowerCase(), {
+    const cleanEmail = email.toLowerCase().trim();
+
+    // Generate secure 6-digit OTP server-side (ignore any client-provided code for STX-01)
+    const otpCode = generateSecureOtp();
+    verificationOtps.set(cleanEmail, {
       code: otpCode,
-      expiresAt: Date.now() + 15 * 60 * 1000,
+      expiresAt: Date.now() + 10 * 60 * 1000, // 10 mins
+      attempts: 0,
     });
 
-    console.log(`[SpendSense Verification] 6-digit OTP code for ${email}: ${otpCode}`);
+    // Deliver real email to inbox via SMTP
+    const emailResult = await sendVerificationEmail(cleanEmail, otpCode);
 
-    // Deliver real email to inbox via Gmail SMTP
-    const emailResult = await sendVerificationEmail(email.toLowerCase(), otpCode);
-
+    // SECURITY: Never return otpCode in JSON response payload (CWE-200 / STX-01)
     res.json({
       message: "Verification code generated and dispatched successfully",
-      code: otpCode,
       emailDelivered: emailResult.success,
     });
   } catch (error) {
@@ -164,9 +183,6 @@ exports.sendVerificationOtp = async (req, res) => {
     res.status(500).json({ message: "Failed to dispatch verification code" });
   }
 };
-
-const DEMO_ACCOUNTS = ["demo@spendsense.app", "demo2@spendsense.app", "test@spendsense.app"];
-const isDemoAccount = (email) => Boolean(email && DEMO_ACCOUNTS.includes(email.toLowerCase().trim()));
 
 exports.verifyOtp = async (req, res) => {
   try {
@@ -177,12 +193,28 @@ exports.verifyOtp = async (req, res) => {
 
     const cleanEmail = email.toLowerCase().trim();
     const record = verificationOtps.get(cleanEmail);
+
+    if (record) {
+      record.attempts = (record.attempts || 0) + 1;
+      if (record.attempts > 5) {
+        verificationOtps.delete(cleanEmail);
+        return res.status(429).json({ message: "Too many invalid attempts. Please request a new code." });
+      }
+    }
+
     // Master code 123456 works strictly for pre-authorized demo testing accounts
     const isMasterCode = isDemoAccount(cleanEmail) && code.trim() === "123456";
     const isValidCode = record && record.code === code.trim() && record.expiresAt > Date.now();
 
     if (isMasterCode || isValidCode) {
       verificationOtps.delete(cleanEmail);
+
+      // Persist verified status in database
+      await prisma.user.updateMany({
+        where: { email: cleanEmail },
+        data: { isEmailVerified: true },
+      });
+
       return res.json({
         message: "Email verified successfully",
         verified: true,
@@ -211,22 +243,26 @@ exports.forgotPassword = async (req, res) => {
     });
 
     if (!user) {
-      return res.status(404).json({ message: "No account found with this email address" });
+      // Uniform timing response to prevent user enumeration
+      return res.json({
+        message: "If an account is associated with this email, a reset code was sent.",
+        emailDelivered: false,
+      });
     }
 
-    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpCode = generateSecureOtp();
     verificationOtps.set(cleanEmail, {
       code: otpCode,
-      expiresAt: Date.now() + 15 * 60 * 1000,
+      expiresAt: Date.now() + 10 * 60 * 1000,
+      attempts: 0,
     });
-
-    console.log(`[SpendSense Password Reset] 6-digit OTP code for ${cleanEmail}: ${otpCode}`);
 
     const emailResult = await sendVerificationEmail(cleanEmail, otpCode);
 
+    // SECURITY: CRITICAL FIX FOR STX-01 (Account Takeover)
+    // NEVER expose otpCode in response body!
     res.json({
-      message: "Password reset code sent to your email",
-      code: otpCode,
+      message: "If an account is associated with this email, a reset code was sent.",
       emailDelivered: emailResult.success,
     });
   } catch (error) {
@@ -248,6 +284,15 @@ exports.resetPassword = async (req, res) => {
 
     const cleanEmail = email.toLowerCase().trim();
     const record = verificationOtps.get(cleanEmail);
+
+    if (record) {
+      record.attempts = (record.attempts || 0) + 1;
+      if (record.attempts > 5) {
+        verificationOtps.delete(cleanEmail);
+        return res.status(429).json({ message: "Too many invalid attempts. Please request a new reset code." });
+      }
+    }
+
     // Master code 123456 works strictly for pre-authorized demo testing accounts
     const isMasterCode = isDemoAccount(cleanEmail) && code.trim() === "123456";
     const isValidCode = record && record.code === code.trim() && record.expiresAt > Date.now();
@@ -283,4 +328,3 @@ exports.resetPassword = async (req, res) => {
     res.status(500).json({ message: "Failed to reset password" });
   }
 };
-

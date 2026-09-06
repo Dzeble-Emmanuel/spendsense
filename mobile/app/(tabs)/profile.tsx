@@ -115,8 +115,12 @@ export default function ProfileScreen() {
 
     if (res.success) {
       setOtpDispatched(true);
+      const clean = user?.email?.toLowerCase().trim();
+      const isDemo = clean && ["demo@spendsense.app", "demo2@spendsense.app", "test@spendsense.app"].includes(clean);
       setModalMessage(
-        `A 6-digit code has been dispatched to ${user?.email || "your email"}.\n(Test code: ${res.code})`
+        isDemo
+          ? `A 6-digit code has been dispatched to ${user?.email}.\n(Demo accounts can use master bypass code: 123456)`
+          : `A 6-digit verification code has been dispatched to ${user?.email || "your email"}.`
       );
     } else {
       setModalError(res.error || "Could not dispatch verification code.");

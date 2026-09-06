@@ -46,44 +46,17 @@ export async function resetDemo2Verification(): Promise<void> {
   } catch {}
 }
 
-export async function sendVerificationOtp(email: string): Promise<{ success: boolean; code: string; error?: string }> {
-  if (!email) return { success: false, code: "", error: "Email is required" };
+export async function sendVerificationOtp(email: string): Promise<{ success: boolean; error?: string }> {
+  if (!email) return { success: false, error: "Email is required" };
   const cleanEmail = email.toLowerCase().trim();
 
-  // Generate a random 6-digit numeric OTP
-  const code = Math.floor(100000 + Math.random() * 900000).toString();
-  const expiresAt = Date.now() + 15 * 60 * 1000; // 15 mins
-
-  const record: PendingOtpRecord = {
-    email: cleanEmail,
-    code,
-    expiresAt,
-  };
-
-  await AsyncStorage.setItem(STORAGE_KEY_PENDING_OTP, JSON.stringify(record));
-
-  // Try dispatching through backend API
   try {
-    await api.post("/auth/send-verification-otp", { email: cleanEmail, code });
-  } catch (err) {
-    try {
-      await fetch("http://10.0.2.2:5000/api/auth/send-verification-otp", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: cleanEmail, code }),
-      });
-    } catch {
-      try {
-        await fetch("http://localhost:5000/api/auth/send-verification-otp", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email: cleanEmail, code }),
-        });
-      } catch {}
-    }
+    const res = await api.post("/auth/send-verification-otp", { email: cleanEmail });
+    return { success: true };
+  } catch (err: any) {
+    const errMsg = err.response?.data?.message || err.message || "Failed to dispatch verification code";
+    return { success: false, error: errMsg };
   }
-
-  return { success: true, code };
 }
 
 export async function verifyEmailCode(email: string, inputCode: string): Promise<{ success: boolean; error?: string }> {
@@ -96,38 +69,25 @@ export async function verifyEmailCode(email: string, inputCode: string): Promise
 
   // 1. Master testing/examiner code (strictly works ONLY for authorized demo accounts)
   if (isDemoEmail(cleanEmail) && cleanCode === "123456") {
+    try {
+      await api.post("/auth/verify-otp", { email: cleanEmail, code: cleanCode });
+    } catch {}
     await markEmailAsVerified(cleanEmail);
     return { success: true };
   }
 
-  // 2. Validate against stored pending OTP
-  try {
-    const raw = await AsyncStorage.getItem(STORAGE_KEY_PENDING_OTP);
-    if (raw) {
-      const record: PendingOtpRecord = JSON.parse(raw);
-      if (record.email === cleanEmail && record.code === cleanCode) {
-        if (record.expiresAt < Date.now()) {
-          return { success: false, error: "Verification code has expired. Please request a new code." };
-        }
-        await markEmailAsVerified(cleanEmail);
-        await AsyncStorage.removeItem(STORAGE_KEY_PENDING_OTP);
-        return { success: true };
-      }
-    }
-  } catch (e) {
-    console.log("Error checking local OTP record:", e);
-  }
-
-  // 3. Fallback check with backend if online
+  // 2. Authoritative backend verification (STX-01 / STX-06 remediation)
   try {
     const res = await api.post("/auth/verify-otp", { email: cleanEmail, code: cleanCode });
     if (res.data?.verified) {
       await markEmailAsVerified(cleanEmail);
       return { success: true };
     }
-  } catch {}
-
-  return { success: false, error: "Incorrect verification code. Please check your inbox or use demo code." };
+    return { success: false, error: res.data?.message || "Invalid or expired verification code" };
+  } catch (err: any) {
+    const message = err.response?.data?.message || "Verification failed. Please check the code and retry.";
+    return { success: false, error: message };
+  }
 }
 
 export async function markEmailAsVerified(email: string): Promise<void> {

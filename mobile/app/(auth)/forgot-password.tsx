@@ -72,8 +72,8 @@ export default function ForgotPasswordScreen() {
       const isDemo = isDemoEmail(cleanEmail);
       setSuccessInfo(
         isDemo
-          ? `Code dispatched! (Demo master code 123456 or inbox code ${res.code || ""})`
-          : "A 6-digit verification code has been dispatched to your email address."
+          ? "Code dispatched! (Demo accounts can use master bypass code: 123456)"
+          : "A 6-digit recovery code has been dispatched to your email address."
       );
     } else {
       setError(res.error || "Unable to send reset code. Please check your email.");
@@ -94,7 +94,7 @@ export default function ForgotPasswordScreen() {
       const isDemo = isDemoEmail(cleanEmail);
       setSuccessInfo(
         isDemo
-          ? `New code dispatched! (Demo master code: 123456 or ${res.code || ""})`
+          ? "New code dispatched! (Demo accounts can use master bypass code: 123456)"
           : "A fresh verification code has been dispatched to your email address."
       );
     } else {
