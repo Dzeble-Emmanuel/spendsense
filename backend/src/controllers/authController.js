@@ -8,10 +8,18 @@ const VALID_CURRENCIES = ["GHS", "USD", "EUR", "GBP", "NGN", "KES"];
 const DEMO_ACCOUNTS = ["demo@spendsense.app", "demo2@spendsense.app", "test@spendsense.app"];
 const isDemoAccount = (email) => Boolean(email && DEMO_ACCOUNTS.includes(email.toLowerCase().trim()));
 
-const JWT_SECRET = process.env.JWT_SECRET || "spendsense-jwt-secret-key-change-in-production-2026";
-if (!process.env.JWT_SECRET && process.env.NODE_ENV === "production") {
-  console.warn("[SECURITY ALERT] JWT_SECRET is not configured in production environment!");
-}
+const getJwtSecret = () => {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("FATAL: JWT_SECRET environment variable must be set in production.");
+    }
+    return "spendsense-jwt-secret-key-change-in-production-2026";
+  }
+  return secret;
+};
+
+const JWT_SECRET = getJwtSecret();
 
 // In-memory OTP storage with rate limiting and expiration tracking
 const verificationOtps = new Map();

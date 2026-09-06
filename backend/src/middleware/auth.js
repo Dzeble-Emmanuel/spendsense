@@ -9,11 +9,13 @@ module.exports = (req, res, next) => {
 
   const token = authHeader.split(" ")[1];
 
+  const secret = process.env.JWT_SECRET || (process.env.NODE_ENV === "production" ? null : "spendsense-jwt-secret-key-change-in-production-2026");
+  if (!secret) {
+    return res.status(500).json({ message: "Server configuration error: JWT_SECRET not configured" });
+  }
+
   try {
-    const decoded = jwt.verify(
-      token,
-      process.env.JWT_SECRET || "spendsense-jwt-secret-key-change-in-production-2026"
-    );
+    const decoded = jwt.verify(token, secret);
     req.user = decoded;
     next();
   } catch (error) {

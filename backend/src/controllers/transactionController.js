@@ -22,13 +22,22 @@ exports.addTransaction = async (req, res) => {
       return res.status(400).json({ message: "Title, amount, type, and category are required" });
     }
 
+    const numAmount = parseFloat(amount);
+    if (isNaN(numAmount) || numAmount <= 0) {
+      return res.status(400).json({ message: "Amount must be a positive number" });
+    }
+
+    if (type !== "income" && type !== "expense") {
+      return res.status(400).json({ message: "Type must be either 'income' or 'expense'" });
+    }
+
     const transaction = await prisma.transaction.create({
       data: {
-        title,
-        amount: parseFloat(amount),
+        title: title.trim().slice(0, 150),
+        amount: numAmount,
         type,
-        category,
-        description: description || null,
+        category: category.trim().slice(0, 80),
+        description: description ? description.trim().slice(0, 500) : null,
         transactionDate: date ? new Date(date) : new Date(),
         userId: req.user.id,
       },
@@ -54,14 +63,26 @@ exports.updateTransaction = async (req, res) => {
       return res.status(404).json({ message: "Transaction not found or unauthorized" });
     }
 
+    let numAmount = undefined;
+    if (amount !== undefined) {
+      numAmount = parseFloat(amount);
+      if (isNaN(numAmount) || numAmount <= 0) {
+        return res.status(400).json({ message: "Amount must be a positive number" });
+      }
+    }
+
+    if (type !== undefined && type !== "income" && type !== "expense") {
+      return res.status(400).json({ message: "Type must be either 'income' or 'expense'" });
+    }
+
     const updated = await prisma.transaction.update({
       where: { id },
       data: {
-        ...(title && { title }),
-        ...(amount !== undefined && { amount: parseFloat(amount) }),
+        ...(title && { title: title.trim().slice(0, 150) }),
+        ...(numAmount !== undefined && { amount: numAmount }),
         ...(type && { type }),
-        ...(category && { category }),
-        ...(description !== undefined && { description }),
+        ...(category && { category: category.trim().slice(0, 80) }),
+        ...(description !== undefined && { description: description ? description.trim().slice(0, 500) : null }),
         ...(date && { transactionDate: new Date(date) }),
       },
     });
