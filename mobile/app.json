@@ -13,7 +13,8 @@
       "infoPlist": {
         "NSCameraUsageDescription": "SpendSense uses your camera to scan receipts and add them as expenses.",
         "NSPhotoLibraryUsageDescription": "SpendSense accesses your photos to import receipts.",
-        "NSFaceIDUsageDescription": "SpendSense uses Face ID to protect your financial data."
+        "NSFaceIDUsageDescription": "SpendSense uses Face ID to protect your financial data.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
