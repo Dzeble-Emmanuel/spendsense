@@ -17,8 +17,11 @@ import { useTheme } from "../../src/hooks/useTheme";
 import { useSettings } from "../../src/hooks/useSettings";
 import { CATEGORY_PRACTICAL_TIPS } from "../../src/types/finance";
 import { useSubFeatureBack } from "../../src/hooks/useSubFeatureBack";
+import { useAuth } from "../../src/context/AuthContext";
+import UnverifiedFeatureGate from "../../src/components/common/UnverifiedFeatureGate";
 
 export default function BudgetScreen() {
+  const { user } = useAuth();
   const { budgets, updateBudget, transactions } = useFinance();
   const { theme } = useTheme();
   const { formatMoney, currency } = useSettings();
@@ -29,6 +32,7 @@ export default function BudgetScreen() {
 
   const [modalCategory, setModalCategory] = useState<string | null>(null);
   const [modalAmount, setModalAmount] = useState("");
+  const [showGateModal, setShowGateModal] = useState(false);
 
   const totalBudget = budgets.reduce((sum, b) => sum + b.budget, 0);
   const totalSpent = transactions
@@ -54,6 +58,10 @@ export default function BudgetScreen() {
   });
 
   const openEditModal = (category: string, currentLimit: number) => {
+    if (!user?.isEmailVerified) {
+      setShowGateModal(true);
+      return;
+    }
     setModalCategory(category);
     setModalAmount(currentLimit > 0 ? String(currentLimit) : "");
   };
@@ -192,9 +200,44 @@ export default function BudgetScreen() {
       </View>
 
       {/* Category Limits & Allowances */}
-      <Text style={[styles.sectionTitle, { color: theme.text }]}>
-        Category Limits & Allowances
-      </Text>
+      <View style={styles.sectionHeaderRow}>
+        <Text style={[styles.sectionTitle, { color: theme.text, marginBottom: 0 }]}>
+          Category Limits & Allowances
+        </Text>
+        {!user?.isEmailVerified && (
+          <TouchableOpacity
+            style={[styles.miniLockBadge, { backgroundColor: "rgba(245, 158, 11, 0.1)", borderColor: "rgba(245, 158, 11, 0.25)" }]}
+            onPress={() => setShowGateModal(true)}
+            activeOpacity={0.7}
+          >
+            <Feather name="lock" size={10} color="#F59E0B" />
+            <Text style={styles.miniLockText}>VERIFY TO EDIT</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* Unverified Budget Creation Notice Banner */}
+      {!user?.isEmailVerified && (
+        <TouchableOpacity
+          style={[styles.budgetLockedBanner, { backgroundColor: theme.card, borderColor: "rgba(245, 158, 11, 0.25)" }]}
+          onPress={() => setShowGateModal(true)}
+          activeOpacity={0.8}
+        >
+          <View style={[styles.budgetLockedIconBox, { backgroundColor: "rgba(245, 158, 11, 0.12)" }]}>
+            <Feather name="lock" size={14} color="#F59E0B" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.budgetLockedTitle, { color: theme.text }]}>Budget Creation Locked</Text>
+            <Text style={[styles.budgetLockedSub, { color: theme.textSecondary }]}>
+              Verify your email address to set and customize category budget caps.
+            </Text>
+          </View>
+          <View style={[styles.verifyPill, { backgroundColor: "rgba(37, 99, 235, 0.12)", borderColor: "rgba(37, 99, 235, 0.3)" }]}>
+            <Text style={styles.verifyPillText}>Unlock</Text>
+            <Feather name="arrow-right" size={11} color="#3B82F6" />
+          </View>
+        </TouchableOpacity>
+      )}
 
       <View style={styles.categoriesGrid}>
         {budgets.map((item) => {
@@ -235,7 +278,11 @@ export default function BudgetScreen() {
                   <Text style={[styles.catAmountText, { color: theme.textSecondary }]}>
                     {formatMoney(spent)} / {hasLimit ? formatMoney(item.budget) : "No limit"}
                   </Text>
-                  <Feather name="edit-2" size={13} color={theme.textMuted} />
+                  <Feather
+                    name={user?.isEmailVerified ? "edit-2" : "lock"}
+                    size={13}
+                    color={user?.isEmailVerified ? theme.textMuted : "#F59E0B"}
+                  />
                 </View>
               </View>
 
@@ -360,6 +407,16 @@ export default function BudgetScreen() {
             </View>
           </View>
         </View>
+      </Modal>
+      {/* Verification Gate Modal for Budget Creation */}
+      <Modal visible={showGateModal} animationType="fade" transparent={false}>
+        <UnverifiedFeatureGate
+          featureName="Custom Budget Creation"
+          featureDescription="Email verification is required to establish custom budget thresholds, create category limits, and activate overspending warnings."
+          iconName="pie-chart"
+          onVerified={() => setShowGateModal(false)}
+          onBack={() => setShowGateModal(false)}
+        />
       </Modal>
     </ScrollView>
   );
@@ -529,4 +586,66 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   modalSaveText: { color: "#FFFFFF", fontSize: 13, fontWeight: "800" },
+
+  // Gating & Minimalist Lock Elements
+  sectionHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  miniLockBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  miniLockText: {
+    color: "#F59E0B",
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 0.5,
+  },
+  budgetLockedBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 12,
+  },
+  budgetLockedIconBox: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  budgetLockedTitle: {
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  budgetLockedSub: {
+    fontSize: 11,
+    lineHeight: 15,
+    marginTop: 2,
+  },
+  verifyPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+  },
+  verifyPillText: {
+    color: "#3B82F6",
+    fontSize: 11,
+    fontWeight: "800",
+  },
 });

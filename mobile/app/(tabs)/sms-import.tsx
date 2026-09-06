@@ -19,15 +19,29 @@ import { useTheme } from "../../src/hooks/useTheme";
 import { useSettings } from "../../src/hooks/useSettings";
 import { useSubFeatureBack } from "../../src/hooks/useSubFeatureBack";
 import { useMoMoListener } from "../../src/hooks/useMoMoListener";
+import { useAuth } from "../../src/context/AuthContext";
+import UnverifiedFeatureGate from "../../src/components/common/UnverifiedFeatureGate";
 import { parseFinancialSMS, ParsedSMSResult } from "../../src/sms/smsParser";
 import { SAMPLE_MOMO_ALERTS } from "../../src/services/smsService";
 
 export default function SMSImportScreen() {
+  const { user } = useAuth();
   const { addTransaction } = useFinance();
   const { theme } = useTheme();
   const { formatMoney } = useSettings();
   const insets = useSafeAreaInsets();
   const handleBack = useSubFeatureBack("/(tabs)/profile");
+
+  if (!user?.isEmailVerified) {
+    return (
+      <UnverifiedFeatureGate
+        featureName="MoMo SMS Auto-Sync"
+        featureDescription="Email verification is required to enable automated Mobile Money SMS background parsing and live payment synchronization."
+        iconName="message-square"
+        onBack={handleBack}
+      />
+    );
+  }
 
   const topPadding = insets.top > 0 ? insets.top + 10 : 20;
 

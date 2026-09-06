@@ -15,6 +15,8 @@ import { useFinance } from "../../src/hooks/useFinance";
 import { useTheme } from "../../src/hooks/useTheme";
 import { useSettings } from "../../src/hooks/useSettings";
 import { useSubFeatureBack } from "../../src/hooks/useSubFeatureBack";
+import { useAuth } from "../../src/context/AuthContext";
+import UnverifiedFeatureGate from "../../src/components/common/UnverifiedFeatureGate";
 
 interface PresetScenario {
   id: string;
@@ -81,11 +83,23 @@ const CATEGORIES = [
 ];
 
 export default function WhatIfScreen() {
+  const { user } = useAuth();
   const { transactions, budgets, expenses, income, healthScore, updateBudget } = useFinance();
   const { theme } = useTheme();
   const { formatMoney } = useSettings();
   const insets = useSafeAreaInsets();
   const handleBack = useSubFeatureBack("/(tabs)/predictions");
+
+  if (!user?.isEmailVerified) {
+    return (
+      <UnverifiedFeatureGate
+        featureName="What-If Decision Simulator"
+        featureDescription="Email verification is required to run multi-scenario forecasting models, testing spending shifts, and budget capacity projections."
+        iconName="help-circle"
+        onBack={handleBack}
+      />
+    );
+  }
 
   const topPadding = insets.top > 0 ? insets.top + 10 : 20;
 

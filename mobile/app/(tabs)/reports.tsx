@@ -19,6 +19,7 @@ import { useTheme } from "../../src/hooks/useTheme";
 import { useAuth } from "../../src/hooks/useAuth";
 import { useSettings } from "../../src/hooks/useSettings";
 import { useSubFeatureBack } from "../../src/hooks/useSubFeatureBack";
+import UnverifiedFeatureGate from "../../src/components/common/UnverifiedFeatureGate";
 
 type ReportPeriod = "this_month" | "last_month" | "last_3_months" | "all_time";
 
@@ -29,6 +30,17 @@ export default function ReportsScreen() {
   const { formatMoney, currency } = useSettings();
   const insets = useSafeAreaInsets();
   const handleBack = useSubFeatureBack("/(tabs)/profile");
+
+  if (!user?.isEmailVerified) {
+    return (
+      <UnverifiedFeatureGate
+        featureName="Financial Reports & Export"
+        featureDescription="Email verification is required to generate, download, and export official CSV and PDF financial statements."
+        iconName="file-text"
+        onBack={handleBack}
+      />
+    );
+  }
 
   const topPadding = insets.top > 0 ? insets.top + 10 : 20;
 

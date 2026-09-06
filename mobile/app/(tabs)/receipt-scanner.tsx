@@ -17,6 +17,8 @@ import { useTheme } from "../../src/hooks/useTheme";
 import { useSettings } from "../../src/hooks/useSettings";
 import { EXPENSE_CATEGORIES } from "../../src/types/finance";
 import { useSubFeatureBack } from "../../src/hooks/useSubFeatureBack";
+import { useAuth } from "../../src/context/AuthContext";
+import UnverifiedFeatureGate from "../../src/components/common/UnverifiedFeatureGate";
 
 interface ScannedData {
   merchant: string;
@@ -27,11 +29,23 @@ interface ScannedData {
 }
 
 export default function ReceiptScannerScreen() {
+  const { user } = useAuth();
   const { addTransaction } = useFinance();
   const { theme } = useTheme();
   const { formatMoney } = useSettings();
   const insets = useSafeAreaInsets();
   const handleBack = useSubFeatureBack("/(tabs)/transactions");
+
+  if (!user?.isEmailVerified) {
+    return (
+      <UnverifiedFeatureGate
+        featureName="AI Receipt Scanner"
+        featureDescription="Email verification is required to activate optical receipt character recognition (OCR) and automatic camera expense logging."
+        iconName="camera"
+        onBack={handleBack}
+      />
+    );
+  }
 
   const topPadding = insets.top > 0 ? insets.top + 10 : 20;
 

@@ -194,6 +194,11 @@ export default function Dashboard() {
         >
           <View style={[styles.actionIconBg, { backgroundColor: "rgba(139, 92, 246, 0.12)" }]}>
             <Ionicons name="scan-outline" size={18} color="#8B5CF6" />
+            {!user?.isEmailVerified && (
+              <View style={styles.actionLockBadge}>
+                <Feather name="lock" size={7} color="#F59E0B" />
+              </View>
+            )}
           </View>
           <Text style={[styles.actionText, { color: theme.text }]}>Scan</Text>
         </TouchableOpacity>
@@ -436,6 +441,17 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     justifyContent: "center",
     alignItems: "center",
+    position: "relative",
+  },
+  actionLockBadge: {
+    position: "absolute",
+    top: -3,
+    right: -3,
+    backgroundColor: "rgba(245, 158, 11, 0.2)",
+    borderColor: "rgba(245, 158, 11, 0.5)",
+    borderWidth: 1,
+    borderRadius: 5,
+    padding: 2,
   },
   actionText: { fontSize: 11, fontWeight: "700" },
 

@@ -50,6 +50,7 @@ export default function ProfileScreen() {
       label: "Budget Tracker",
       icon: "pie-chart" as const,
       route: "/(tabs)/budget",
+      isRestricted: !user?.isEmailVerified,
     },
     {
       label: "Subscriptions Manager",
@@ -61,11 +62,13 @@ export default function ProfileScreen() {
       label: "SMS & MoMo Auto-Sync",
       icon: "message-square" as const,
       route: "/(tabs)/sms-import",
+      isRestricted: !user?.isEmailVerified,
     },
     {
       label: "Reports & CSV Export",
       icon: "file-text" as const,
       route: "/(tabs)/reports",
+      isRestricted: !user?.isEmailVerified,
     },
   ];
 
@@ -274,6 +277,13 @@ export default function ProfileScreen() {
             {item.badge && (
               <View style={[styles.badgePill, { backgroundColor: theme.subCard, borderColor: theme.border }]}>
                 <Text style={[styles.badgeText, { color: theme.textSecondary }]}>{item.badge}</Text>
+              </View>
+            )}
+
+            {item.isRestricted && (
+              <View style={[styles.badgePill, { backgroundColor: "rgba(245, 158, 11, 0.12)", borderColor: "rgba(245, 158, 11, 0.3)", flexDirection: "row", alignItems: "center", gap: 3 }]}>
+                <Feather name="lock" size={9} color="#F59E0B" />
+                <Text style={[styles.badgeText, { color: "#F59E0B" }]}>VERIFY</Text>
               </View>
             )}
 
